@@ -1,0 +1,30 @@
+# Node modules
+node_modules/
+
+# Environment files
+server/.env
+client/.env
+
+# Build outputs
+dist/
+client/dist/
+server/dist/
+
+# Logs
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Uploads
+server/uploads/
+
+# IDE settings
+.vscode/
+.idea/
+
+# Other unnecessary files
+*.lock
+*.bak
+*.tmp
