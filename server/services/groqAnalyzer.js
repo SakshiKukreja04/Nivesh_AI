@@ -64,7 +64,7 @@ function buildPrompt(startupContext) {
 
 export async function analyzeStartupWithGroq(startupContext) {
   const GROQ_API_URL = process.env.GROQ_API_URL;
-  const GROQ_API_KEY = process.env.GROQ_API_KEY || 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;
+  const GROQ_API_KEY = process.env.GROQ_API_KEY ;
   const GROQ_MODEL = process.env.GROQ_MODEL || "text-model";
 
   // If Groq config is missing or points to a placeholder domain, fall back to a local deterministic
