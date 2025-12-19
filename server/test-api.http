@@ -1,0 +1,165 @@
+### NiveshAI Backend API - Postman Compatible HTTP Requests
+### 
+### IMPORTANT: This file can be used with REST Client extension in VS Code
+### For Postman, import the NiveshAI_API.postman_collection.json file instead
+### See POSTMAN_TESTING_GUIDE.md for detailed step-by-step instructions
+###
+### Base URL - Update this if your server runs on a different port
+@baseUrl = http://localhost:3000
+
+### ============================================
+### 1. FILE UPLOAD & ANALYSIS ENDPOINT
+### ============================================
+### POST /api/analyze
+### 
+### This endpoint accepts multipart/form-data with:
+### - Text fields: startupName, location, stage, sector, businessModel, website, fundingRaised, teamSize, additionalNotes
+### - File fields: pitchDeck, transcript, email
+###
+### For Postman: Use form-data body type, not raw
+
+POST {{baseUrl}}/api/analyze
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="startupName"
+
+TechFlow AI
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="location"
+
+San Francisco, CA
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="stage"
+
+Series A
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="sector"
+
+SaaS
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="businessModel"
+
+B2B
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="website"
+
+https://techflow.ai
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="fundingRaised"
+
+$2.5M
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="teamSize"
+
+15
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="additionalNotes"
+
+A promising B2B SaaS startup with strong growth metrics and proven team.
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="pitchDeck"; filename="pitch-deck.pdf"
+Content-Type: application/pdf
+
+< ./sample_transcript.txt
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### ============================================
+### 2. RAG QUERY ENDPOINTS
+### ============================================
+### POST /api/rag/query
+###
+### These endpoints query the RAG system with specific questions
+### Requires startupContext and userQuery in JSON body
+###
+
+### 2.1 Risk Analysis Query
+POST {{baseUrl}}/api/rag/query
+Content-Type: application/json
+
+{
+  "startupContext": {
+    "startupName": "TechFlow AI",
+    "location": "San Francisco, CA",
+    "stage": "Series A",
+    "sector": "SaaS",
+    "businessModel": "B2B",
+    "website": "https://techflow.ai",
+    "fundingRaised": "$2.5M",
+    "teamSize": "15"
+  },
+  "userQuery": "What are the main risks for this startup?"
+}
+
+### 2.2 Team Assessment Query
+POST {{baseUrl}}/api/rag/query
+Content-Type: application/json
+
+{
+  "startupContext": {
+    "startupName": "TechFlow AI",
+    "stage": "Series A",
+    "sector": "SaaS"
+  },
+  "userQuery": "Evaluate the team and provide recommendations"
+}
+
+### 2.3 Market Analysis Query
+POST {{baseUrl}}/api/rag/query
+Content-Type: application/json
+
+{
+  "startupContext": {
+    "startupName": "TechFlow AI",
+    "sector": "SaaS",
+    "businessModel": "B2B"
+  },
+  "userQuery": "What is the market opportunity and competitive landscape?"
+}
+
+### 2.4 Valuation Notes Query
+POST {{baseUrl}}/api/rag/query
+Content-Type: application/json
+
+{
+  "startupContext": {
+    "startupName": "TechFlow AI",
+    "stage": "Series A",
+    "fundingRaised": "$2.5M",
+    "sector": "SaaS"
+  },
+  "userQuery": "Provide valuation notes and investment recommendations"
+}
+
+### ============================================
+### EXPECTED RESPONSES
+### ============================================
+###
+### File Upload Response (/api/analyze):
+### {
+###   "success": true,
+###   "analysis": {
+###     "summary": "...",
+###     "topRisks": ["...", "..."],
+###     "teamAssessment": "...",
+###     "marketOutlook": "..."
+###   },
+###   "startupId": "techflow-ai"
+### }
+###
+### RAG Query Response (/api/rag/query):
+### {
+###   "success": true,
+###   "analysis": {
+###     "summary": "...",
+###     "topRisks": ["...", "..."],
+###     "teamAssessment": "...",
+###     "marketOutlook": "...",
+###     "valuationNotes": "..." (optional)
+###   }
+### }
+###
+### For Postman testing, use the collection file:
+### NiveshAI_API.postman_collection.json
+###
+### See POSTMAN_TESTING_GUIDE.md for detailed instructions

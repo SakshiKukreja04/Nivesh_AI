@@ -1,0 +1,307 @@
+import axios from "axios";
+import { retrieveRelevantContext } from "./ragRetriever.js";
+import { DocumentChunk, GroqResponse, StartupMetadata } from "../types/index.js";
+
+const DEFAULT_TIMEOUT = 60_000;
+const MAX_TOKENS = Number(process.env.GROQ_MAX_TOKENS || 2000);
+const MAX_CHUNK_LENGTH = 12000;
+const MIN_EVIDENCE_CHUNKS = 1;
+
+/**
+ * Sanitizes user input to prevent prompt injection.
+ * Removes potentially dangerous patterns.
+ */
+function sanitizeInput(input: string): string {
+  if (!input || typeof input !== "string") return "";
+  // Remove control characters and limit length
+  return input
+    .replace(/[\x00-\x1F\x7F]/g, "")
+    .slice(0, 1000)
+    .trim();
+}
+
+/**
+ * Builds a safe prompt with retrieved evidence.
+ * NEVER sends user query directly - only uses retrieved context.
+ */
+function buildPrompt(startupContext: StartupMetadata, evidence: DocumentChunk[], sanitizedQuery: string): { system: string; prompt: string } {
+  // System prompt enforces structured output and evidence-only responses
+  const system = `You are a venture capital analyst. Use ONLY the provided evidence from the startup documents. Do NOT hallucinate or make up information. If evidence is insufficient, state that clearly.`;
+
+  // Context from startup metadata (sanitized)
+  const context = `Startup metadata:\n${JSON.stringify(startupContext, null, 2)}`;
+
+  // Evidence from retrieved documents (this is the RAG context)
+  const evidenceText = evidence.length > 0
+    ? evidence.map((e, idx) => `[Evidence ${idx + 1}]\n${e.text.slice(0, MAX_CHUNK_LENGTH)}`).join("\n\n")
+    : "No relevant evidence found in documents.";
+
+  // Expected schema for structured output
+  const expectedSchema: GroqResponse = {
+    summary: "string",
+    topRisks: ["string"],
+    teamAssessment: "string",
+    marketOutlook: "string",
+  };
+
+  // Build prompt - user query is only used to guide what to extract from evidence
+  const prompt = [
+    `User's analysis request: ${sanitizedQuery}`,
+    `\nStartup Context:\n${context}`,
+    `\nRetrieved Evidence from Documents:\n${evidenceText}`,
+    `\nRequired Output Format (JSON only, no markdown, no extra text):`,
+    JSON.stringify(expectedSchema, null, 2),
+    `\nReturn ONLY a valid JSON object matching this schema. Do not include markdown code blocks, explanations, or any text outside the JSON.`,
+  ].join("\n");
+
+  return { system, prompt };
+}
+
+/**
+ * Safely parses JSON response from Groq.
+ */
+function safeParseJson(text: string): GroqResponse | null {
+  if (!text || typeof text !== "string") return null;
+  
+  // Remove markdown code blocks if present
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.slice(7);
+  }
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.slice(3);
+  }
+  if (cleaned.endsWith("```")) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  cleaned = cleaned.trim();
+
+  try {
+    const parsed = JSON.parse(cleaned) as Partial<GroqResponse>;
+    
+    // Validate required fields
+    if (
+      typeof parsed.summary === "string" &&
+      Array.isArray(parsed.topRisks) &&
+      typeof parsed.teamAssessment === "string" &&
+      typeof parsed.marketOutlook === "string"
+    ) {
+      return {
+        summary: parsed.summary,
+        topRisks: parsed.topRisks,
+        teamAssessment: parsed.teamAssessment,
+        marketOutlook: parsed.marketOutlook,
+        valuationNotes: parsed.valuationNotes,
+      };
+    }
+    return null;
+  } catch (err) {
+    console.error("JSON parse error:", err);
+    return null;
+  }
+}
+
+/**
+ * @deprecated Use analyzeWithRAG instead. This function is kept for backward compatibility but throws an error.
+ */
+export async function analyzeStartupWithGroq(_startupContext: StartupMetadata): Promise<GroqResponse> {
+  throw new Error("Use analyzeWithRAG for RAG-based analysis. Direct analysis without context retrieval is not allowed.");
+}
+
+/**
+ * Performs RAG-based analysis with Groq.
+ * 
+ * SAFETY RULES:
+ * 1. User query is sanitized and never sent directly to Groq
+ * 2. Context is ALWAYS retrieved from vector store first
+ * 3. Only retrieved evidence is used in the prompt
+ * 4. Output is validated as structured JSON
+ * 
+ * @param startupContext - Startup metadata
+ * @param userQuery - User's analysis request (will be sanitized)
+ * @returns Structured analysis response
+ */
+export async function analyzeWithRAG(startupContext: StartupMetadata, userQuery: string): Promise<GroqResponse> {
+  // Default to correct Groq API endpoint if not provided
+  // Fix: Ensure we always use the correct endpoint with /openai/ in the path
+  let GROQ_API_URL = process.env.GROQ_API_URL || "https://api.groq.com/openai/v1/chat/completions";
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:127',message:'Initial GROQ_API_URL from env',data:{url:GROQ_API_URL,hasOpenai:GROQ_API_URL.includes('/openai/')},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  
+  // Fix incorrect URLs that might be in .env file - more robust check
+  const correctUrl = "https://api.groq.com/openai/v1/chat/completions";
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:135',message:'Before URL fix check',data:{currentUrl:GROQ_API_URL,correctUrl:correctUrl,needsFix:GROQ_API_URL !== correctUrl && GROQ_API_URL.includes("api.groq.com") && !GROQ_API_URL.includes("/openai/")},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
+  
+  // Always fix if URL doesn't have /openai/v1/chat/completions in the path (most robust check)
+  if (!GROQ_API_URL.includes("/openai/v1/chat/completions")) {
+    console.warn(`Fixing incorrect Groq API URL: ${GROQ_API_URL} -> ${correctUrl}`);
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:140',message:'Fixing incorrect URL',data:{oldUrl:GROQ_API_URL,newUrl:correctUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    GROQ_API_URL = correctUrl;
+  }
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:145',message:'Final URL before API call',data:{finalUrl:GROQ_API_URL,isCorrect:GROQ_API_URL === correctUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
+  fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:139',message:'Final GROQ_API_URL before API call',data:{url:GROQ_API_URL},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  // Updated to use a currently supported model (llama-3.1-70b-versatile was decommissioned)
+  let GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  
+  // Auto-fix deprecated models
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:159',message:'Checking model before fix',data:{model:GROQ_MODEL,isDeprecated:GROQ_MODEL === "llama-3.1-70b-versatile" || GROQ_MODEL.includes("llama-3.1-70b")},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
+  
+  if (GROQ_MODEL === "llama-3.1-70b-versatile" || GROQ_MODEL.includes("llama-3.1-70b")) {
+    console.warn(`Model ${GROQ_MODEL} has been decommissioned. Updating to llama-3.3-70b-versatile`);
+    GROQ_MODEL = "llama-3.3-70b-versatile";
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:163',message:'Model fixed',data:{oldModel:process.env.GROQ_MODEL,newModel:GROQ_MODEL},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+  }
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:168',message:'Final model value',data:{finalModel:GROQ_MODEL},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
+
+  // Validate environment
+  if (!GROQ_API_KEY) {
+    console.warn("Groq API key missing, returning mock response");
+    return {
+      summary: "Analysis unavailable: Groq API key not configured. Please set GROQ_API_KEY in .env file.",
+      topRisks: ["API configuration required"],
+      teamAssessment: "Unable to assess without API access.",
+      marketOutlook: "Unable to assess without API access.",
+    };
+  }
+
+  // Sanitize user input
+  const sanitizedQuery = sanitizeInput(userQuery);
+
+  try {
+    // STEP 1: Retrieve relevant context from vector store (RAG retrieval)
+    const evidence = await retrieveRelevantContext(sanitizedQuery, 5);
+
+    // Validate we have evidence
+    if (evidence.length < MIN_EVIDENCE_CHUNKS) {
+      console.warn("Insufficient evidence retrieved, proceeding with minimal context");
+    }
+
+    // STEP 2: Build safe prompt with retrieved evidence
+    const { system, prompt } = buildPrompt(startupContext, evidence, sanitizedQuery);
+
+    // STEP 3: Call Groq API with structured prompt
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:188',message:'About to call Groq API',data:{url:GROQ_API_URL,model:GROQ_MODEL},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    // Ensure model is correct before creating payload
+    if (GROQ_MODEL === "llama-3.1-70b-versatile" || GROQ_MODEL.includes("llama-3.1-70b")) {
+      console.warn(`[CRITICAL] Model ${GROQ_MODEL} detected in payload creation. Forcing fix.`);
+      GROQ_MODEL = "llama-3.3-70b-versatile";
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:200',message:'Creating payload with model',data:{model:GROQ_MODEL,payloadModel:GROQ_MODEL},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
+    const payload = {
+      model: GROQ_MODEL,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.2,
+      max_tokens: Math.min(MAX_TOKENS, 2000),
+      response_format: { type: "json_object" },
+    };
+
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/c9ee31df-d0f7-4ab0-91b4-a2a7171f5842',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'groqAnalyzer.ts:215',message:'Payload created, about to call API',data:{url:GROQ_API_URL,payloadModel:payload.model,modelVar:GROQ_MODEL},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+
+    const resp = await axios.post(GROQ_API_URL, payload, {
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      timeout: DEFAULT_TIMEOUT,
+    });
+
+    // STEP 4: Extract and validate response
+    const data = resp.data;
+    let textOutput: string | null = null;
+
+    if (data?.choices && data.choices[0]) {
+      const choice = data.choices[0];
+      textOutput = choice.message?.content ?? choice.text ?? null;
+    }
+    if (!textOutput && typeof data === "string") {
+      textOutput = data;
+    }
+    if (!textOutput && data && typeof data === "object") {
+      textOutput = JSON.stringify(data);
+    }
+    if (!textOutput) {
+      throw new Error("Groq returned empty response");
+    }
+
+    // STEP 5: Parse and validate JSON structure
+    const parsed = safeParseJson(textOutput);
+    if (!parsed) {
+      throw new Error("Groq response is not valid JSON or missing required fields");
+    }
+
+    return parsed;
+  } catch (err) {
+    console.error("analyzeWithRAG error:", err);
+    
+    // Return safe fallback response with detailed error info
+    if (axios.isAxiosError(err)) {
+      const status = err.response?.status;
+      const statusText = err.response?.statusText;
+      const errorData = err.response?.data;
+      const requestUrl = err.config?.url;
+      
+      console.error(`Groq API Error Details:`, {
+        status,
+        statusText,
+        url: requestUrl,
+        error: errorData,
+        message: err.message,
+      });
+      
+      let errorMessage = `Analysis failed: ${err.message}`;
+      if (status === 404) {
+        errorMessage = `Groq API endpoint not found (404). Check GROQ_API_URL in .env file. Current URL: ${requestUrl || GROQ_API_URL}`;
+      } else if (status === 401) {
+        errorMessage = `Groq API authentication failed (401). Check GROQ_API_KEY in .env file.`;
+      } else if (status === 429) {
+        errorMessage = `Groq API rate limit exceeded (429). Please try again later.`;
+      } else if (status) {
+        errorMessage = `Groq API error (${status}): ${statusText || err.message}`;
+      }
+      
+      return {
+        summary: errorMessage,
+        topRisks: ["API communication error"],
+        teamAssessment: "Unable to assess due to API error.",
+        marketOutlook: "Unable to assess due to API error.",
+      };
+    }
+    
+    // Re-throw non-Axios errors
+    throw err;
+  }
+}
+
+export default { analyzeStartupWithGroq, analyzeWithRAG };

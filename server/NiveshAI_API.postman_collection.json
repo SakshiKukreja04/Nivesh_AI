@@ -1,0 +1,380 @@
+{
+	"info": {
+		"_postman_id": "nivesh-ai-api-collection",
+		"name": "NiveshAI Backend API",
+		"description": "Complete API collection for testing NiveshAI startup analysis endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "File Upload & Analysis",
+			"item": [
+				{
+					"name": "1. Upload Pitch Deck and Analyze",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has success field\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('success');",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"});",
+									"",
+									"pm.test(\"Response contains analysis\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('analysis');",
+									"    pm.expect(jsonData.analysis).to.have.property('summary');",
+									"    pm.expect(jsonData.analysis).to.have.property('topRisks');",
+									"    pm.expect(jsonData.analysis).to.have.property('teamAssessment');",
+									"    pm.expect(jsonData.analysis).to.have.property('marketOutlook');",
+									"});",
+									"",
+									"pm.test(\"Response contains startupId\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('startupId');",
+									"});",
+									"",
+									"// Store startupId for later use",
+									"if (pm.response.json().startupId) {",
+									"    pm.environment.set('startupId', pm.response.json().startupId);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "startupName",
+									"value": "TechFlow AI",
+									"type": "text"
+								},
+								{
+									"key": "location",
+									"value": "San Francisco, CA",
+									"type": "text"
+								},
+								{
+									"key": "stage",
+									"value": "Series A",
+									"type": "text"
+								},
+								{
+									"key": "sector",
+									"value": "SaaS",
+									"type": "text"
+								},
+								{
+									"key": "businessModel",
+									"value": "B2B",
+									"type": "text"
+								},
+								{
+									"key": "website",
+									"value": "https://techflow.ai",
+									"type": "text"
+								},
+								{
+									"key": "fundingRaised",
+									"value": "$2.5M",
+									"type": "text"
+								},
+								{
+									"key": "teamSize",
+									"value": "15",
+									"type": "text"
+								},
+								{
+									"key": "additionalNotes",
+									"value": "A promising B2B SaaS startup with strong growth metrics and proven team.",
+									"type": "text"
+								},
+								{
+									"key": "pitchDeck",
+									"type": "file",
+									"src": [],
+									"description": "Upload a PDF pitch deck or text file"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/analyze",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"analyze"
+							]
+						},
+						"description": "Upload startup files (PDF pitch deck, transcript, or email) along with metadata to get AI-powered analysis. The files are processed, chunked, embedded, and stored in the vector database for RAG retrieval."
+					},
+					"response": []
+				},
+				{
+					"name": "2. Upload Transcript File",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "startupName",
+									"value": "HealthPulse",
+									"type": "text"
+								},
+								{
+									"key": "location",
+									"value": "New York, NY",
+									"type": "text"
+								},
+								{
+									"key": "stage",
+									"value": "Seed",
+									"type": "text"
+								},
+								{
+									"key": "sector",
+									"value": "Healthtech",
+									"type": "text"
+								},
+								{
+									"key": "transcript",
+									"type": "file",
+									"src": [],
+									"description": "Upload a transcript text file"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/analyze",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"analyze"
+							]
+						},
+						"description": "Upload a transcript file for analysis"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for uploading startup files and getting initial analysis"
+		},
+		{
+			"name": "RAG Query Endpoints",
+			"item": [
+				{
+					"name": "1. Query - Risk Analysis",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has success field\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('success');",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"});",
+									"",
+									"pm.test(\"Response contains Groq analysis\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('analysis');",
+									"    pm.expect(jsonData.analysis).to.have.property('summary');",
+									"    pm.expect(jsonData.analysis).to.have.property('topRisks');",
+									"    pm.expect(jsonData.analysis).to.have.property('teamAssessment');",
+									"    pm.expect(jsonData.analysis).to.have.property('marketOutlook');",
+									"});",
+									"",
+									"// Log the Groq response",
+									"console.log('Groq Analysis Response:', JSON.stringify(pm.response.json().analysis, null, 2));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"startupContext\": {\n    \"startupName\": \"TechFlow AI\",\n    \"location\": \"San Francisco, CA\",\n    \"stage\": \"Series A\",\n    \"sector\": \"SaaS\",\n    \"businessModel\": \"B2B\",\n    \"website\": \"https://techflow.ai\",\n    \"fundingRaised\": \"$2.5M\",\n    \"teamSize\": \"15\"\n  },\n  \"userQuery\": \"What are the main risks for this startup?\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/rag/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rag",
+								"query"
+							]
+						},
+						"description": "Query the RAG system to get risk analysis. This endpoint retrieves relevant context from the vector store and uses Groq AI to generate insights."
+					},
+					"response": []
+				},
+				{
+					"name": "2. Query - Team Assessment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"startupContext\": {\n    \"startupName\": \"TechFlow AI\",\n    \"stage\": \"Series A\",\n    \"sector\": \"SaaS\"\n  },\n  \"userQuery\": \"Evaluate the team and provide recommendations\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/rag/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rag",
+								"query"
+							]
+						},
+						"description": "Get team assessment and recommendations"
+					},
+					"response": []
+				},
+				{
+					"name": "3. Query - Market Analysis",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"startupContext\": {\n    \"startupName\": \"TechFlow AI\",\n    \"sector\": \"SaaS\",\n    \"businessModel\": \"B2B\"\n  },\n  \"userQuery\": \"What is the market opportunity and competitive landscape?\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/rag/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rag",
+								"query"
+							]
+						},
+						"description": "Analyze market opportunity and competitive landscape"
+					},
+					"response": []
+				},
+				{
+					"name": "4. Query - Valuation Notes",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"startupContext\": {\n    \"startupName\": \"TechFlow AI\",\n    \"stage\": \"Series A\",\n    \"fundingRaised\": \"$2.5M\",\n    \"sector\": \"SaaS\"\n  },\n  \"userQuery\": \"Provide valuation notes and investment recommendations\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/rag/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rag",
+								"query"
+							]
+						},
+						"description": "Get valuation notes and investment recommendations"
+					},
+					"response": []
+				}
+			],
+			"description": "RAG query endpoints for asking specific questions about startups"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	]
+}
+
