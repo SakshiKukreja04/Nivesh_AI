@@ -138,10 +138,25 @@ export class LocalVectorStore implements VectorStore {
    */
   async upsert(vectors: EmbeddingVector[]): Promise<void> {
     for (const vec of vectors) {
+      // Coerce metadata.text to string, never allow [object Object]
+      let text = "";
+      if (vec.metadata && typeof vec.metadata.text !== "undefined") {
+        if (typeof vec.metadata.text === "string") {
+          text = vec.metadata.text;
+        } else {
+          text = String(vec.metadata.text);
+          if (text === "[object Object]") {
+            console.error(`[VectorStore] Invalid text value in metadata for id ${vec.id}:`, vec.metadata.text);
+            text = "";
+          }
+        }
+      }
+      // Debug log: typeof and first 200 chars
+      console.log(`[VectorStore] typeof text: ${typeof text}, first 200 chars:`, text.slice(0, 200));
       const existingIndex = this.store.findIndex((v) => v.id === vec.id);
       const vectorWithText: EmbeddingVector & { text?: string } = {
         ...vec,
-        text: (vec.metadata?.text as string) || "",
+        text,
       };
       if (existingIndex !== -1) {
         this.store[existingIndex] = vectorWithText;

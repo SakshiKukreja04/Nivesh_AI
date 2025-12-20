@@ -1,13 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
-import { createRequire } from "module";
 import { ProcessedFile } from "../types/index.js";
-
-// pdf-parse is CommonJS, use createRequire for ES modules
-const require = createRequire(import.meta.url);
-const pdfParseModule = require("pdf-parse");
-// Handle both default export and named export cases
-const pdfParse = pdfParseModule.default || pdfParseModule;
+import { PDFParse } from "pdf-parse";
 
 const MAX_TEXT_LENGTH = 50000; // Increased for better RAG context
 const UPLOADS_DIR = path.resolve("./data/uploads");
@@ -21,14 +15,14 @@ async function ensureUploadsDir(): Promise<void> {
 }
 ensureUploadsDir();
 
-export type FileType = "pdf" | "txt" | "audio" | "unknown";
+export type FileType = "pdf" | "txt" | "pptx" | "audio" | "unknown";
 
 /**
  * Detects file type from Express Multer file object.
  */
 export function detectFileType(file: Express.Multer.File | undefined): FileType {
     if (!file || !file.mimetype) return "unknown";
-    
+
     const mime = file.mimetype.toLowerCase();
     const name = (file.originalname || "").toLowerCase();
 
@@ -42,6 +36,12 @@ export function detectFileType(file: Express.Multer.File | undefined): FileType 
         mime === "message/rfc822"
     ) {
         return "txt";
+    }
+    if (
+        mime === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+        name.endsWith(".pptx")
+    ) {
+        return "pptx";
     }
     if (mime.startsWith("audio/") || name.endsWith(".mp3") || name.endsWith(".wav")) {
         return "audio";
@@ -64,7 +64,7 @@ export async function processUploadedFile(
     type: FileType
 ): Promise<ProcessedFile> {
     if (!file || !file.buffer) {
-        return { text: "", savedFile: null };
+        return { text: "", savedFile: null, fileType: type };
     }
 
     try {
@@ -74,9 +74,9 @@ export async function processUploadedFile(
         switch (type) {
             case "pdf": {
                 try {
-                    // pdf-parse returns a promise that resolves to an object with text property
-                    const data = await pdfParse(file.buffer);
-                    text = data && data.text ? String(data.text) : "";
+                    const parser = new PDFParse({ data: file.buffer });
+                    const textResult = await parser.getText();
+                    text = typeof textResult.text === "string" ? textResult.text : "";
                 } catch (err) {
                     console.error("PDF parsing error:", err);
                     text = "";
@@ -88,6 +88,24 @@ export async function processUploadedFile(
                     text = file.buffer.toString("utf-8");
                 } catch (err) {
                     console.error("Text file processing error:", err);
+                    text = "";
+                }
+                break;
+            }
+            case "pptx": {
+                try {
+                    // Save PPTX file temporarily for processing
+                    const filename = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
+                    const tempPath = path.join(UPLOADS_DIR, filename);
+                    await fs.writeFile(tempPath, file.buffer);
+                    savedFile = tempPath;
+
+                    // Basic text extraction using unzip and XML parsing (fallback)
+                    // For now, we'll save the file but not extract text (requires additional setup)
+                    text = ""; // PPTX text extraction would require additional libraries
+                    console.warn("PPTX text extraction not implemented - file saved for future processing");
+                } catch (err) {
+                    console.error("PPTX file processing error:", err);
                     text = "";
                 }
                 break;
@@ -116,6 +134,15 @@ export async function processUploadedFile(
             }
         }
 
+
+        // Enforce string-only text and add guard
+        if (typeof text !== "string") {
+            console.error(`[Ingestion] Non-string text detected for fileType ${type}:`, typeof text);
+            throw new Error("ProcessedFile.text must be a string");
+        }
+        // Debug log: typeof and first 200 chars
+        console.log(`[Ingestion] typeof text: ${typeof text}, first 200 chars:`, text.slice(0, 200));
+
         // Normalize whitespace
         text = text.replace(/\s+/g, " ").trim();
 
@@ -125,9 +152,15 @@ export async function processUploadedFile(
             console.warn(`Text truncated to ${MAX_TEXT_LENGTH} characters`);
         }
 
-        return { text, savedFile };
+        // Text validation: skip empty documents with logs
+        if (!text || text.trim().length === 0) {
+            console.warn(`Empty text extracted from ${type} file - skipping`);
+            return { text: "", savedFile, fileType: type };
+        }
+
+        return { text, savedFile, fileType: type };
     } catch (err) {
         console.error("processUploadedFile error:", err);
-        return { text: "", savedFile: null };
+        return { text: "", savedFile: null, fileType: type };
     }
 }

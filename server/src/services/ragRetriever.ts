@@ -1,6 +1,7 @@
 import vectorStore from "./vectorStore.js";
 import { generateEmbedding } from "./embeddingService.js";
 import { DocumentChunk } from "../types/index.js";
+import { extractClaims } from "./claimExtractor.js";
 
 const MAX_QUERY_LENGTH = 1000;
 const DEFAULT_TOP_K = 5;
@@ -56,7 +57,17 @@ export async function retrieveRelevantContext(query: string, topK: number = DEFA
     );
 
     console.log(`Retrieved ${validResults.length} relevant chunks for query`);
-    return validResults;
+
+    // Debug log: typeof and first 200 chars of chunk.text before claim extraction
+    for (const chunk of validResults) {
+      console.log(`[Retrieval] typeof chunk.text: ${typeof chunk.text}, first 200 chars:`, typeof chunk.text === 'string' ? chunk.text.slice(0, 200) : String(chunk.text).slice(0, 200));
+      const claims = extractClaims([chunk]);
+      chunk.claims = claims;
+      const claimTypes = claims.map(c => c.claim).filter(Boolean);
+      console.log(`Extracted claims from chunk ${chunk.id}: [${claimTypes.join(", ")}]`);
+    }
+    // Return chunks with claims for transparency
+    return validResults.map(chunk => ({ ...chunk, claims: chunk.claims || [] }));
   } catch (err) {
     console.error("Error retrieving relevant context:", err);
     // Return empty array on error rather than throwing

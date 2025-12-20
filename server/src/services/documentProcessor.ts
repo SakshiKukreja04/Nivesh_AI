@@ -1,4 +1,5 @@
 import { chunkText } from "../utils/textChunker.js";
+import { normalizeToPlainText } from "../utils/normalizeText.js";
 import vectorStore from "./vectorStore.js";
 import { generateEmbedding } from "./embeddingService.js";
 import { EmbeddingVector, ProcessedFile } from "../types/index.js";
@@ -26,39 +27,50 @@ export async function processAndStoreDocuments(
   const allVectors: EmbeddingVector[] = [];
 
   try {
+
     for (const file of files) {
       if (!file || !file.text) {
         console.warn("Skipping file with no text content");
         continue;
       }
 
+      // Normalize to plain string (flatten arrays/objects)
+      let normalizedText = normalizeToPlainText(file.text);
       // Limit text length to prevent excessive processing
-      const text = file.text.slice(0, MAX_TEXT_LENGTH);
-      
+      normalizedText = normalizedText.slice(0, MAX_TEXT_LENGTH);
+      // Debug log: print first 300 chars of normalized text
+      console.log(`[Ingestion] Normalized text (first 300 chars):`, normalizedText.slice(0, 300));
+
       // Chunk the text with metadata
-      const chunks = chunkText(text, {
+      const chunks = chunkText(normalizedText, {
         startupId,
         source: file.savedFile || "upload",
         ...(metadata || {}),
       });
 
-      // Generate embeddings for each chunk
       for (const chunk of chunks) {
+        // Hard guard: chunk.text must be string
+        if (typeof chunk.text !== "string") {
+          console.error(`[Ingestion] Invalid chunk.text type:`, typeof chunk.text, chunk.text);
+          continue;
+        }
+        // Debug log: typeof and first 200 chars
+        console.log(`[Ingestion] typeof chunk.text: ${typeof chunk.text}, first 200 chars:`, chunk.text.slice(0, 200));
+
         try {
           const values = await generateEmbedding(chunk.text);
-          
           // Validate embedding dimensions
           if (!Array.isArray(values) || values.length === 0) {
             console.warn(`Invalid embedding for chunk ${chunk.id}, skipping`);
             continue;
           }
-
+          // Enforce string-only for metadata.text
           allVectors.push({
             id: chunk.id,
             values,
             metadata: {
               ...chunk.metadata,
-              text: chunk.text, // Store text for retrieval
+              text: typeof chunk.text === "string" ? chunk.text : String(chunk.text),
             },
           });
         } catch (err) {

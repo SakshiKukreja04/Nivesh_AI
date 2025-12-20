@@ -9,6 +9,7 @@ import { processAndStoreDocuments } from "./services/documentProcessor.js";
 import { analyzeWithRAG } from "./services/groqAnalyzer.js";
 import ragRouter from "./routes/ragQuery.route.js";
 import { ProcessedFile, StartupMetadata } from "./types/index.js";
+import { extractClaims } from "./services/claimExtractor.js";
 
 const DATA_DIR = path.resolve("./data");
 
@@ -48,13 +49,21 @@ app.post("/api/analyze",
             const processedFiles: ProcessedFile[] = await Promise.all(
                 Object.entries(files).map(async ([, fileArray]) => {
                     const file = fileArray[0];
+                    const fileType = file ? detectFileType(file) : "unknown";
                     if (!file) {
-                        return { text: "", savedFile: null };
+                        return { text: "", savedFile: null, fileType };
                     }
-                    const fileType = detectFileType(file);
                     return processUploadedFile(file, fileType);
                 })
             );
+
+
+            // Extract and log claims from all processed files
+            const documentChunks = processedFiles
+                .filter(f => f && f.text)
+                .map((f, idx) => ({ id: String(idx + 1), text: f.text, metadata: {} }));
+            const claims = extractClaims(documentChunks);
+            console.log("Extracted Claims:", JSON.stringify(claims, null, 2));
 
             // Store documents in vector store for RAG
             const startupId = metadata.startupName?.toLowerCase().replace(/\s+/g, "-") || `startup-${Date.now()}`;

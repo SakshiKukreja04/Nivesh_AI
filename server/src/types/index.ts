@@ -1,7 +1,16 @@
+// Structured claim extracted from startup documents
+export interface StartupClaims {
+  claim: string;
+  value?: string | number;
+  confidence?: number;
+  sourceChunk?: string;
+  [key: string]: unknown;
+}
 export interface DocumentChunk {
   id: string;
   text: string;
   metadata: Record<string, unknown>;
+  claims?: StartupClaims[];
 }
 
 export interface EmbeddingVector {
@@ -21,6 +30,7 @@ export interface GroqResponse {
 export interface ProcessedFile {
   text: string;
   savedFile: string | null;
+  fileType: "pdf" | "txt" | "pptx" | "audio" | "unknown";
 }
 
 export interface StartupMetadata {
