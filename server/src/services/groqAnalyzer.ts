@@ -1,6 +1,6 @@
 import axios from "axios";
 import { retrieveRelevantContext } from "./ragRetriever.js";
-import { DocumentChunk, GroqResponse, StartupMetadata } from "../types/index.js";
+import { DocumentChunk, GroqResponse, StartupMetadata, FounderVerificationResult } from "../types/index.js";
 
 const DEFAULT_TIMEOUT = 60_000;
 const MAX_TOKENS = Number(process.env.GROQ_MAX_TOKENS || 2000);
@@ -24,12 +24,23 @@ function sanitizeInput(input: string): string {
  * Builds a safe prompt with retrieved evidence.
  * NEVER sends user query directly - only uses retrieved context.
  */
-function buildPrompt(startupContext: StartupMetadata, evidence: DocumentChunk[], sanitizedQuery: string): { system: string; prompt: string } {
+function buildPrompt(
+  startupContext: StartupMetadata, 
+  evidence: DocumentChunk[], 
+  sanitizedQuery: string,
+  founderVerification?: FounderVerificationResult | null
+): { system: string; prompt: string } {
   // System prompt enforces structured output and evidence-only responses
-  const system = `You are a venture capital analyst. Use ONLY the provided evidence from the startup documents. Do NOT hallucinate or make up information. If evidence is insufficient, state that clearly.`;
+  const system = `You are a venture capital analyst. Use ONLY the provided evidence from the startup documents. Do NOT hallucinate or make up information. If evidence is insufficient, state that clearly. Pay special attention to red flags and suspicious patterns in founder verification data.`;
 
   // Context from startup metadata (sanitized)
   const context = `Startup metadata:\n${JSON.stringify(startupContext, null, 2)}`;
+
+  // Founder verification data (if available)
+  let founderContext = "";
+  if (founderVerification) {
+    founderContext = `\n\nFounder Verification Data:\n${JSON.stringify(founderVerification, null, 2)}\n\nIMPORTANT: Analyze this founder verification data carefully. Flag any red flags or suspicious patterns in the topRisks array. Pay attention to:\n- Low founder strength score (< 6.0)\n- Red flags detected (short tenure, recent hires, IC-only roles, etc.)\n- Missing critical experience or credentials\n- Any inconsistencies or concerns`;
+  }
 
   // Evidence from retrieved documents (this is the RAG context)
   const evidenceText = evidence.length > 0
@@ -39,8 +50,8 @@ function buildPrompt(startupContext: StartupMetadata, evidence: DocumentChunk[],
   // Expected schema for structured output
   const expectedSchema: GroqResponse = {
     summary: "string",
-    topRisks: ["string"],
-    teamAssessment: "string",
+    topRisks: ["string"], // Should include founder-related red flags if found
+    teamAssessment: "string", // Should incorporate founder verification insights
     marketOutlook: "string",
   };
 
@@ -48,10 +59,12 @@ function buildPrompt(startupContext: StartupMetadata, evidence: DocumentChunk[],
   const prompt = [
     `User's analysis request: ${sanitizedQuery}`,
     `\nStartup Context:\n${context}`,
+    founderContext,
     `\nRetrieved Evidence from Documents:\n${evidenceText}`,
     `\nRequired Output Format (JSON only, no markdown, no extra text):`,
     JSON.stringify(expectedSchema, null, 2),
     `\nReturn ONLY a valid JSON object matching this schema. Do not include markdown code blocks, explanations, or any text outside the JSON.`,
+    founderVerification ? `\n\nCRITICAL: If founder verification shows red flags (low score, short tenure, recent hires, IC-only roles, etc.), include these as specific risks in the topRisks array.` : "",
   ].join("\n");
 
   return { system, prompt };
@@ -119,9 +132,14 @@ export async function analyzeStartupWithGroq(_startupContext: StartupMetadata): 
  * 
  * @param startupContext - Startup metadata
  * @param userQuery - User's analysis request (will be sanitized)
+ * @param founderVerification - Optional founder verification data to include in analysis
  * @returns Structured analysis response
  */
-export async function analyzeWithRAG(startupContext: StartupMetadata, userQuery: string): Promise<GroqResponse> {
+export async function analyzeWithRAG(
+  startupContext: StartupMetadata, 
+  userQuery: string,
+  founderVerification?: FounderVerificationResult | null
+): Promise<GroqResponse> {
   const GROQ_API_URL = process.env.GROQ_API_URL;
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
   const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.1-70b-versatile";
@@ -149,8 +167,8 @@ export async function analyzeWithRAG(startupContext: StartupMetadata, userQuery:
       console.warn("Insufficient evidence retrieved, proceeding with minimal context");
     }
 
-    // STEP 2: Build safe prompt with retrieved evidence
-    const { system, prompt } = buildPrompt(startupContext, evidence, sanitizedQuery);
+    // STEP 2: Build safe prompt with retrieved evidence and founder verification
+    const { system, prompt } = buildPrompt(startupContext, evidence, sanitizedQuery, founderVerification);
 
     // STEP 3: Call Groq API with structured prompt
     const payload = {

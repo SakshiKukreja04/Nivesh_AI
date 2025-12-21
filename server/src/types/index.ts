@@ -45,3 +45,32 @@ export interface StartupMetadata {
   additionalNotes?: string;
   [key: string]: unknown;
 }
+
+export interface FounderSignals {
+  experienceYears: number;
+  pastCompanies: string[];
+  roles: string[];
+  education: string[];
+  domainAlignment: string[];
+}
+
+export interface FounderVerificationResult {
+  startupId: string;
+  role: string;
+  founderStrengthScore: number;
+  signals: FounderSignals;
+  redFlags: string[];
+}
+
+export interface TeamMember {
+  name: string;
+  role: string;
+  background?: string;
+  experience?: string;
+  education?: string;
+}
+
+export interface TeamInfo {
+  members: TeamMember[];
+  totalMembers: number;
+}

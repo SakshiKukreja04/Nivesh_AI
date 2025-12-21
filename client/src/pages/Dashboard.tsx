@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -61,9 +61,38 @@ const risks = [
   { level: 'low', text: 'Competitive pressure from established players' },
 ];
 
+interface FounderVerification {
+  startupId: string;
+  role: string;
+  founderStrengthScore: number;
+  signals: {
+    experienceYears: number;
+    pastCompanies: string[];
+    roles: string[];
+    education: string[];
+    domainAlignment: string[];
+  };
+  redFlags: string[];
+}
+
+interface TeamMember {
+  name: string;
+  role: string;
+  background?: string;
+  experience?: string;
+  education?: string;
+}
+
+interface TeamInfo {
+  members: TeamMember[];
+  totalMembers: number;
+}
+
 const Dashboard = () => {
   const { startupId } = useParams();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [founderVerification, setFounderVerification] = useState<FounderVerification | null>(null);
+  const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
 
   const startupData = {
     name: 'TechFlow AI',
@@ -72,6 +101,50 @@ const Dashboard = () => {
     decision: 'proceed' as const,
     confidenceScore: 87,
   };
+
+  useEffect(() => {
+    if (startupId) {
+      // Fetch founder verification
+      console.log(`[Dashboard] Fetching founder verification for startupId: ${startupId}`);
+      fetch(`/api/founder-verification/${startupId}`)
+        .then(res => {
+          console.log(`[Dashboard] Founder verification response status: ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          console.log(`[Dashboard] Founder verification data:`, JSON.stringify(data, null, 2));
+          if (data.success && data.verification) {
+            setFounderVerification(data.verification);
+            console.log(`[Dashboard] Founder verification loaded successfully`);
+          } else {
+            console.warn(`[Dashboard] No founder verification found for ${startupId}`);
+          }
+        })
+        .catch(err => {
+          console.error('[Dashboard] Error fetching founder verification:', err);
+        });
+
+      // Fetch team info
+      console.log(`[Dashboard] Fetching team info for startupId: ${startupId}`);
+      fetch(`/api/team-info/${startupId}`)
+        .then(res => {
+          console.log(`[Dashboard] Team info response status: ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          console.log(`[Dashboard] Team info data:`, JSON.stringify(data, null, 2));
+          if (data.success && data.teamInfo) {
+            setTeamInfo(data.teamInfo);
+            console.log(`[Dashboard] Team info loaded successfully`);
+          } else {
+            console.warn(`[Dashboard] No team info found for ${startupId}`);
+          }
+        })
+        .catch(err => {
+          console.error('[Dashboard] Error fetching team info:', err);
+        });
+    }
+  }, [startupId]);
 
   return (
     <Layout isLoggedIn>
@@ -228,7 +301,7 @@ const Dashboard = () => {
               </motion.div>
 
               {/* Founder & Team - Expanded */}
-              <FounderTeamCard />
+              <FounderTeamCard founderVerification={founderVerification} />
 
               {/* Market Opportunity */}
               <MarketOpportunityCard />

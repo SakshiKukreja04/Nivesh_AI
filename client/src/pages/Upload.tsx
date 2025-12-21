@@ -32,7 +32,7 @@ import Layout from '@/components/layout/Layout';
 interface UploadedFile {
   name: string;
   size: string;
-  type: 'deck' | 'transcript' | 'email';
+  type: 'deck' | 'transcript' | 'email' | 'cv';
 }
 
 const Upload = () => {
@@ -52,13 +52,16 @@ const Upload = () => {
   const [notes, setNotes] = useState("");
   const [pitchDeckFile, setPitchDeckFile] = useState<File | null>(null);
   const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [founderRole, setFounderRole] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleFileUpload = (type: 'deck' | 'transcript' | 'email') => {
+  const handleFileUpload = (type: 'deck' | 'transcript' | 'email' | 'cv') => {
     // Trigger hidden file input; set accept based on type
     if (!fileInputRef.current) return;
     if (type === 'deck') fileInputRef.current.accept = '.pdf,.pptx';
     else if (type === 'transcript') fileInputRef.current.accept = '.txt,.pdf,.mp3,.wav';
+    else if (type === 'cv') fileInputRef.current.accept = '.pdf';
     else fileInputRef.current.accept = '.eml,.txt';
     fileInputRef.current.dataset.type = type;
     fileInputRef.current.click();
@@ -72,6 +75,7 @@ const Upload = () => {
     setUploadedFiles([...uploadedFiles, uploaded]);
     if (type === 'deck') setPitchDeckFile(file);
     if (type === 'transcript') setTranscriptFile(file);
+    if (type === 'cv') setCvFile(file);
     // Reset input so same file can be selected again if needed
     e.target.value = '';
   };
@@ -96,14 +100,19 @@ const Upload = () => {
     form.append('additionalNotes', notes);
     if (pitchDeckFile) form.append('pitchDeck', pitchDeckFile);
     if (transcriptFile) form.append('transcript', transcriptFile);
+    if (cvFile) {
+      form.append('cv', cvFile);
+      form.append('role', founderRole || 'Founder');
+    }
 
     setIsAnalyzing(true);
     try {
       const resp = await fetch('/api/analyze', { method: 'POST', body: form });
       const data = await resp.json();
       if (resp.ok) {
-        // Navigate to dashboard or show results
-        navigate('/dashboard/techflow-ai');
+        // Navigate to dashboard with the returned startupId
+        const id = data.startupId || startupName.toLowerCase().replace(/\s+/g, '-') || 'techflow-ai';
+        navigate(`/dashboard/${id}`);
       } else {
         console.error('Analyze error', data);
         setIsAnalyzing(false);
@@ -294,6 +303,7 @@ const Upload = () => {
                     {[
                       { type: 'deck' as const, label: 'Pitch Deck', icon: Briefcase, accept: '.pdf,.pptx' },
                       { type: 'email' as const, label: 'Founder Emails', icon: FileText, accept: '.eml,.txt' },
+                      { type: 'cv' as const, label: 'Founder CV/Resume', icon: Users, accept: '.pdf' },
                     ].map(({ type, label, icon: Icon, accept }) => (
                       <div
                         key={type}
@@ -308,6 +318,19 @@ const Upload = () => {
                       </div>
                     ))}
                   </div>
+
+                  {/* Founder Role Input (shown when CV is uploaded) */}
+                  {cvFile && (
+                    <div className="space-y-2">
+                      <Label htmlFor="founderRole">Founder Role</Label>
+                      <Input 
+                        id="founderRole" 
+                        placeholder="e.g., CEO, CTO, Founder" 
+                        value={founderRole}
+                        onChange={(e) => setFounderRole(e.target.value)}
+                      />
+                    </div>
+                  )}
 
                   {/* Hidden file input used for both pitch deck and emails */}
                   <input ref={fileInputRef} type="file" onChange={onFileChange} style={{ display: 'none' }} />

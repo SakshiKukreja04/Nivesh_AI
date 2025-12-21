@@ -1,22 +1,151 @@
 import { motion } from 'framer-motion';
-import { Users, CheckCircle, AlertTriangle, GraduationCap, Briefcase, Award } from 'lucide-react';
+import { Users, CheckCircle, AlertTriangle, GraduationCap, Briefcase, Award, Flag } from 'lucide-react';
 
-const FounderTeamCard = () => {
-  const founderScore = 8.5;
-  
-  const backgrounds = [
-    { icon: GraduationCap, text: 'CEO: Stanford MBA, Berkeley CS undergrad', type: 'positive' },
-    { icon: Briefcase, text: 'CEO: 10 years at Salesforce, VP Product', type: 'positive' },
-    { icon: Award, text: 'CEO: 2 prior exits ($15M, $42M acquisitions)', type: 'positive' },
-    { icon: GraduationCap, text: 'CTO: MIT PhD in Machine Learning', type: 'positive' },
-    { icon: Briefcase, text: 'CTO: 8 years at Google Brain team', type: 'positive' },
-  ];
+interface FounderVerification {
+  startupId: string;
+  role: string;
+  founderStrengthScore: number;
+  signals: {
+    experienceYears: number;
+    pastCompanies: string[];
+    roles: string[];
+    education: string[];
+    domainAlignment: string[];
+  };
+  redFlags: string[];
+}
 
-  const redFlags = [
-    { text: 'Key person risk: CTO owns all core IP and ML architecture', severity: 'high' },
-    { text: 'No technical co-founder succession plan in place', severity: 'high' },
-    { text: 'CFO joined 3 months ago, still onboarding', severity: 'medium' },
-  ];
+interface TeamMember {
+  name: string;
+  role: string;
+  background?: string;
+  experience?: string;
+  education?: string;
+}
+
+interface TeamInfo {
+  members: TeamMember[];
+  totalMembers: number;
+}
+
+interface FounderTeamCardProps {
+  founderVerification?: FounderVerification | null;
+  teamInfo?: TeamInfo | null;
+}
+
+/**
+ * Generates explanation for founder score based on signals and red flags
+ */
+function generateFounderExplanation(founderVerification: FounderVerification | null): {
+  explanation: string;
+  flagType: 'green' | 'red' | 'neutral';
+  reasons: string[];
+} {
+  if (!founderVerification) {
+    return {
+      explanation: 'Founder verification data not available.',
+      flagType: 'neutral',
+      reasons: [],
+    };
+  }
+
+  const { founderStrengthScore, signals, redFlags, role } = founderVerification;
+  const reasons: string[] = [];
+
+  if (founderStrengthScore >= 7) {
+    // Green flag - explain positive factors
+    if (signals.experienceYears > 8) {
+      reasons.push(`Strong experience: ${signals.experienceYears} years in the industry`);
+    }
+    if (signals.pastCompanies.length > 0) {
+      const topTechCompanies = ['Google', 'Microsoft', 'Apple', 'Amazon', 'Facebook', 'Meta', 'Salesforce', 'Oracle', 'IBM', 'Adobe', 'Intel', 'Nvidia', 'Tesla', 'Uber', 'Airbnb', 'Stripe', 'Palantir', 'Snowflake', 'Databricks', 'OpenAI', 'Anthropic'];
+      const hasTopTech = signals.pastCompanies.some(company => 
+        topTechCompanies.some(top => company.toLowerCase().includes(top.toLowerCase()))
+      );
+      if (hasTopTech) {
+        reasons.push(`Ex-top tech company experience: ${signals.pastCompanies.filter(c => topTechCompanies.some(t => c.toLowerCase().includes(t.toLowerCase()))).join(', ')}`);
+      } else {
+        reasons.push(`Previous companies: ${signals.pastCompanies.slice(0, 3).join(', ')}`);
+      }
+    }
+    if (signals.roles.some(r => /(founder|co-founder|ceo|cto|vp|director|manager)/i.test(r))) {
+      reasons.push(`Leadership roles: ${signals.roles.filter(r => /(founder|co-founder|ceo|cto|vp|director|manager)/i.test(r)).slice(0, 2).join(', ')}`);
+    }
+    if (signals.domainAlignment.length > 0) {
+      reasons.push(`Domain alignment: ${signals.domainAlignment.join(', ')}`);
+    }
+    if (signals.education.length > 0) {
+      reasons.push(`Education: ${signals.education.slice(0, 2).join(', ')}`);
+    }
+
+    return {
+      explanation: `${role} demonstrates strong qualifications with a founder strength score of ${founderStrengthScore}/10. The assessment indicates a well-qualified candidate with relevant experience and credentials.`,
+      flagType: 'green',
+      reasons,
+    };
+  } else if (founderStrengthScore < 6) {
+    // Red flag - explain concerns
+    if (signals.experienceYears < 5) {
+      reasons.push(`Limited experience: Only ${signals.experienceYears} years of experience`);
+    }
+    if (redFlags.length > 0) {
+      redFlags.forEach(flag => {
+        if (flag.includes('Average tenure < 1.2 years')) {
+          reasons.push(`Short tenure: ${flag}`);
+        } else if (flag.includes('Leadership joined < 6 months')) {
+          reasons.push(`Recent hire: ${flag}`);
+        } else if (flag.includes('Only Individual Contributor')) {
+          reasons.push(`Lack of leadership: ${flag}`);
+        } else {
+          reasons.push(flag);
+        }
+      });
+    }
+    if (signals.pastCompanies.length === 0) {
+      reasons.push('No previous company experience listed');
+    }
+    if (signals.roles.length === 0) {
+      reasons.push('No clear role history');
+    }
+    if (signals.domainAlignment.length === 0) {
+      reasons.push('No clear domain alignment');
+    }
+
+    return {
+      explanation: `${role} has a founder strength score of ${founderStrengthScore}/10, which falls below the acceptable threshold. Several concerns have been identified that may impact the startup's success.`,
+      flagType: 'red',
+      reasons,
+    };
+  } else {
+    // Neutral (6-7)
+    const positiveReasons: string[] = [];
+    const concerns: string[] = [];
+
+    if (signals.experienceYears >= 5) {
+      positiveReasons.push(`${signals.experienceYears} years of experience`);
+    } else {
+      concerns.push(`Limited experience: ${signals.experienceYears} years`);
+    }
+
+    if (signals.pastCompanies.length > 0) {
+      positiveReasons.push(`Previous companies: ${signals.pastCompanies.slice(0, 2).join(', ')}`);
+    }
+
+    if (redFlags.length > 0) {
+      concerns.push(...redFlags.slice(0, 2));
+    }
+
+    return {
+      explanation: `${role} has a founder strength score of ${founderStrengthScore}/10, indicating moderate qualifications. The assessment shows a mix of positive factors and areas for improvement.`,
+      flagType: 'neutral',
+      reasons: [...positiveReasons, ...concerns],
+    };
+  }
+}
+
+const FounderTeamCard = ({ founderVerification, teamInfo }: FounderTeamCardProps) => {
+  const founderScore = founderVerification?.founderStrengthScore ?? 0;
+  const explanation = generateFounderExplanation(founderVerification);
 
   return (
     <motion.div
@@ -34,7 +163,7 @@ const FounderTeamCard = () => {
       <div className="mb-6 p-4 rounded-xl bg-gradient-to-br from-secondary/5 to-primary/5 border border-secondary/10">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-foreground">Founder Strength Score</span>
-          <span className="text-2xl font-bold text-foreground">{founderScore}<span className="text-sm text-muted-foreground font-normal">/10</span></span>
+          <span className="text-2xl font-bold text-foreground">{founderScore.toFixed(1)}<span className="text-sm text-muted-foreground font-normal">/10</span></span>
         </div>
         <div className="h-3 bg-muted rounded-full overflow-hidden">
           <motion.div 
@@ -50,43 +179,90 @@ const FounderTeamCard = () => {
         </div>
       </div>
 
-      {/* Background Bullets */}
-      <div className="mb-6">
-        <p className="text-sm font-medium text-foreground mb-3">Team Background</p>
-        <ul className="space-y-2">
-          {backgrounds.map((item, i) => (
-            <li key={i} className="flex items-start gap-2">
-              <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-              <span className="text-sm text-muted-foreground">{item.text}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Red Flags */}
+      {/* Founder Explanation */}
       <div>
-        <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-destructive" />
-          Red Flags
-        </p>
-        <div className="space-y-2">
-          {redFlags.map((flag, i) => (
-            <div 
-              key={i}
-              className={`flex items-start gap-2 p-3 rounded-lg border-l-4 ${
-                flag.severity === 'high' 
-                  ? 'bg-destructive/5 border-destructive' 
-                  : 'bg-warning/5 border-warning'
-              }`}
-            >
-              <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${
-                flag.severity === 'high' ? 'text-destructive' : 'text-warning'
-              }`} />
-              <span className="text-sm text-foreground">{flag.text}</span>
+        <div className="flex items-center gap-2 mb-3">
+          <Flag className={`h-4 w-4 ${
+            explanation.flagType === 'green' 
+              ? 'text-success' 
+              : explanation.flagType === 'red' 
+              ? 'text-destructive' 
+              : 'text-muted-foreground'
+          }`} />
+          <p className="text-sm font-medium text-foreground">
+            {explanation.flagType === 'green' 
+              ? 'Green Flag - Strong Founder' 
+              : explanation.flagType === 'red' 
+              ? 'Red Flag - Concerns Identified' 
+              : 'Neutral Assessment'}
+          </p>
+        </div>
+        
+        <div className={`p-4 rounded-lg border-l-4 ${
+          explanation.flagType === 'green'
+            ? 'bg-success/5 border-success'
+            : explanation.flagType === 'red'
+            ? 'bg-destructive/5 border-destructive'
+            : 'bg-muted/50 border-muted-foreground'
+        }`}>
+          <p className="text-sm text-foreground mb-3">{explanation.explanation}</p>
+          
+          {explanation.reasons.length > 0 && (
+            <div className="space-y-2">
+              {explanation.reasons.map((reason, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  {explanation.flagType === 'green' ? (
+                    <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
+                  ) : explanation.flagType === 'red' ? (
+                    <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border-2 border-muted-foreground mt-0.5 shrink-0" />
+                  )}
+                  <span className="text-sm text-muted-foreground">{reason}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
+
+      {/* Team Members Section */}
+      {teamInfo && teamInfo.members.length > 0 && (
+        <div className="mt-6">
+          <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+            <Users className="h-4 w-4 text-secondary" />
+            Team Members ({teamInfo.totalMembers})
+          </p>
+          <div className="space-y-3">
+            {teamInfo.members.map((member, i) => (
+              <div 
+                key={i}
+                className="p-3 rounded-lg bg-muted/50 border border-border hover:bg-muted transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Briefcase className="h-4 w-4 text-secondary shrink-0" />
+                      <span className="font-medium text-foreground">{member.name}</span>
+                      <span className="text-sm text-muted-foreground">•</span>
+                      <span className="text-sm font-medium text-secondary">{member.role}</span>
+                    </div>
+                    {member.background && (
+                      <p className="text-xs text-muted-foreground ml-6">{member.background}</p>
+                    )}
+                    {member.experience && (
+                      <p className="text-xs text-muted-foreground ml-6">Experience: {member.experience}</p>
+                    )}
+                    {member.education && (
+                      <p className="text-xs text-muted-foreground ml-6">{member.education}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 };

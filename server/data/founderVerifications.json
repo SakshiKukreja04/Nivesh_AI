@@ -1,0 +1,96 @@
+{
+  "kartify": {
+    "startupId": "kartify",
+    "role": "Founder",
+    "founderStrengthScore": 9.5,
+    "signals": {
+      "experienceYears": 11,
+      "pastCompanies": [
+        "RAHUL SHARMA Founder & CEO",
+        "LinkedIn",
+        "X"
+      ],
+      "roles": [
+        "Senior Product Manager",
+        "Founder",
+        "CEO",
+        "engineer",
+        "product manager",
+        "Analyst"
+      ],
+      "education": [
+        "MA Fo",
+        "ma PR",
+        "ms ac",
+        "Bachelor of Te",
+        "at India FinTech"
+      ],
+      "domainAlignment": [
+        "SaaS",
+        "AI/ML",
+        "Fintech"
+      ]
+    },
+    "redFlags": []
+  },
+  "care-n-save": {
+    "startupId": "care-n-save",
+    "role": "Founder",
+    "founderStrengthScore": 7,
+    "signals": {
+      "experienceYears": 0,
+      "pastCompanies": [
+        "Ankit Bansal Hyderabad",
+        "LinkedIn",
+        "X"
+      ],
+      "roles": [
+        "CTO",
+        "Manager",
+        "COO"
+      ],
+      "education": [
+        "ms to",
+        "Bachelor of Ph",
+        "MBA in",
+        "Bachelor from MIT"
+      ],
+      "domainAlignment": [
+        "AI/ML",
+        "Healthtech"
+      ]
+    },
+    "redFlags": []
+  },
+  "reallygreatsite": {
+    "startupId": "reallygreatsite",
+    "role": "Founder",
+    "founderStrengthScore": 9.5,
+    "signals": {
+      "experienceYears": 11,
+      "pastCompanies": [
+        "high-growth startups",
+        "LinkedIn",
+        "X",
+        "PayFlow",
+        "PayFlow Technologies",
+        "Infosys"
+      ],
+      "roles": [
+        "Senior Software Engineer",
+        "Founder",
+        "CEO",
+        "engineer",
+        "Software Engineer",
+        "Engineer"
+      ],
+      "education": [],
+      "domainAlignment": [
+        "SaaS",
+        "AI/ML",
+        "Fintech"
+      ]
+    },
+    "redFlags": []
+  }
+}
