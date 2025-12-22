@@ -1,3 +1,18 @@
+// ProductTechSignals: deterministic product extraction and Groq polishing
+export interface ProductTechSignals {
+  sector: "healthtech" | "saas" | "fintech" | "unknown";
+  productSummary: string; // raw extracted text
+  polishedSummary: string; // Groq output
+  keyMetrics: Record<string, string | number>; // dynamic key-value metrics
+  defensibility: {
+    pros: string[];
+    cons: string[];
+  };
+  rawEvidence: Array<{
+    section: string;
+    snippet: string;
+  }>;
+}
 // Structured claim extracted from startup documents
 export interface StartupClaims {
   claim: string;
@@ -66,8 +81,8 @@ export interface TeamMember {
   name: string;
   role: string;
   background?: string;
-  experience?: string;
-  education?: string;
+  experience?: string | { value: string; source: string };
+  education?: string | { value: string; source: string };
 }
 
 export interface TeamInfo {

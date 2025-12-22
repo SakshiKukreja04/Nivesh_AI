@@ -19,8 +19,9 @@ interface TeamMember {
   name: string;
   role: string;
   background?: string;
-  experience?: string;
-  education?: string;
+  experience?: string | { value: string; source: string };
+  education?: string | { value: string; source: string };
+  aiAnalysis?: string;
 }
 
 interface TeamInfo {
@@ -155,7 +156,7 @@ const FounderTeamCard = ({ founderVerification, teamInfo }: FounderTeamCardProps
       className="bg-card rounded-2xl border border-border shadow-lg p-6"
     >
       <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-        <Users className="h-5 w-5 text-secondary" />
+        <Users className="h-4 w-5 text-secondary" />
         Founder & Team Assessment
       </h2>
 
@@ -226,15 +227,15 @@ const FounderTeamCard = ({ founderVerification, teamInfo }: FounderTeamCardProps
         </div>
       </div>
 
-      {/* Team Members Section */}
-      {teamInfo && teamInfo.members.length > 0 && (
-        <div className="mt-6">
-          <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-            <Users className="h-4 w-4 text-secondary" />
-            Team Members ({teamInfo.totalMembers})
-          </p>
-          <div className="space-y-3">
-            {teamInfo.members.map((member, i) => (
+      {/* Team Members Section (always show, even if empty) */}
+      <div className="mt-6">
+        <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+          <Users className="h-4 w-4 text-secondary" />
+          Team Members{teamInfo && teamInfo.totalMembers ? ` (${teamInfo.totalMembers})` : ''}
+        </p>
+        <div className="space-y-3">
+          {teamInfo && teamInfo.members.length > 0 ? (
+            teamInfo.members.map((member, i) => (
               <div 
                 key={i}
                 className="p-3 rounded-lg bg-muted/50 border border-border hover:bg-muted transition-colors"
@@ -247,22 +248,36 @@ const FounderTeamCard = ({ founderVerification, teamInfo }: FounderTeamCardProps
                       <span className="text-sm text-muted-foreground">•</span>
                       <span className="text-sm font-medium text-secondary">{member.role}</span>
                     </div>
+                    {/* AI-generated role importance analysis */}
+                    {member.aiAnalysis && (
+                      <p className="text-xs text-primary ml-6 font-semibold">AI Analysis: {member.aiAnalysis}</p>
+                    )}
                     {member.background && (
                       <p className="text-xs text-muted-foreground ml-6">{member.background}</p>
                     )}
-                    {member.experience && (
-                      <p className="text-xs text-muted-foreground ml-6">Experience: {member.experience}</p>
+                    {/* Experience: Only show if pitch_deck or synthetic */}
+                    {member.experience && typeof member.experience === 'object' && member.experience.source === 'pitch_deck' && (
+                      <p className="text-xs text-muted-foreground ml-6">Experience: {member.experience.value}</p>
                     )}
-                    {member.education && (
-                      <p className="text-xs text-muted-foreground ml-6">{member.education}</p>
+                    {member.experience && typeof member.experience === 'object' && member.experience.source === 'synthetic' && (
+                      <p className="text-xs text-muted-foreground ml-6"><i>Experience: Not disclosed in pitch deck</i></p>
+                    )}
+                    {/* Education: Only show if pitch_deck or synthetic */}
+                    {member.education && typeof member.education === 'object' && member.education.source === 'pitch_deck' && (
+                      <p className="text-xs text-muted-foreground ml-6">Education: {member.education.value}</p>
+                    )}
+                    {member.education && typeof member.education === 'object' && member.education.source === 'synthetic' && (
+                      <p className="text-xs text-muted-foreground ml-6"><i>Education: Not disclosed in pitch deck</i></p>
                     )}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            ))
+          ) : (
+            <div className="text-xs text-muted-foreground ml-6">No team members found.</div>
+          )}
         </div>
-      )}
+      </div>
     </motion.div>
   );
 };

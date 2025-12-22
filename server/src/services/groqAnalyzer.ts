@@ -1,3 +1,102 @@
+/**
+ * Builds a Groq prompt for the Market Opportunity card, following strict investor-grade requirements.
+ * Does NOT allow Groq to generate or modify numbers. All numbers are validated and provided.
+ * Output is strictly:
+ * {
+ *   "problemClarity": "High | Medium | Low",
+ *   "aiMarketAnalysis": "<2–3 sentence investor-grade analysis>"
+ * }
+ */
+export function buildMarketOpportunityPrompt({
+  sector,
+  TAM,
+  SAM,
+  SOM,
+  growthRate,
+  persona,
+  problemStatement,
+  sectorBenchmarks,
+  validation,
+}: {
+  sector: "SaaS" | "Fintech" | "Healthtech";
+  TAM: number;
+  SAM: number;
+  SOM: number;
+  growthRate: number;
+  persona: string;
+  problemStatement: string;
+  sectorBenchmarks: {
+    avgTAM: number;
+    avgGrowthRate: number;
+  };
+  validation: {
+    tamRealism: string;
+    growthAlignment: string;
+    somLogic: string;
+    personaFitScore: number;
+  };
+}): { system: string; prompt: string } {
+  const system = `You are an investment analyst AI assisting a venture capital dashboard.\n\nYou are NOT allowed to generate or modify numeric values. All numbers provided are already validated.`;
+
+  const prompt = `Your task is to:\n1. Explain the market opportunity using investor-grade language\n2. Highlight strengths without hype\n3. Maintain a neutral, analytical tone\n4. Avoid speculative claims\n\nContext:\n\nStartup Sector:\n${sector}\n\nUser-Provided Market Metrics (Validated):\n- TAM: $${TAM.toLocaleString()}\n- SAM: $${SAM.toLocaleString()}\n- SOM (Year 3): $${SOM.toLocaleString()}\n- Market Growth Rate: ${growthRate}% CAGR\n\nSector Benchmark Comparison:\n- Average Sector TAM: $${sectorBenchmarks.avgTAM.toLocaleString()}\n- Average Sector Growth Rate: ${sectorBenchmarks.avgGrowthRate}% CAGR\n- TAM Realism: ${validation.tamRealism}\n- Growth Alignment: ${validation.growthAlignment}\n- SOM Logic: ${validation.somLogic}\n- Persona Fit Score: ${validation.personaFitScore}\n\nTarget Persona:\n${persona}\n\nProblem Statement:\n${problemStatement}\n\nInstructions:\n- Do NOT mention benchmarks explicitly\n- Do NOT repeat numeric values unnecessarily\n- Focus on market clarity, demand drivers, and whitespace\n- Avoid exaggerated language (no \"massive\", \"explosive\", etc.)\n\nOutput Format (STRICT):\n\n{\n  \"problemClarity\": \"High | Medium | Low\",\n  \"aiMarketAnalysis\": \"<2–3 sentence investor-grade analysis>\"\n}`;
+
+  return { system, prompt };
+}
+/**
+ * Returns an AI-generated importance analysis for a team member's role in a given domain using the LLM (Groq API).
+ */
+export async function analyzeTeamRoleImportanceLLM(role: string, domain: string): Promise<string> {
+  const GROQ_API_URL = process.env.GROQ_API_URL;
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.1-70b-versatile";
+
+  if (!GROQ_API_URL || !GROQ_API_KEY) {
+    console.warn("Groq credentials missing, returning fallback response");
+    return "AI analysis unavailable: Groq API credentials not configured.";
+  }
+
+  const prompt = `You are a venture capital analyst. Analyze the importance and impact of the following team member's role in the context of a startup operating in the specified domain. Respond with a single, concise sentence (max 25 words). Do not hallucinate.\n\nRole: ${role}\nDomain: ${domain}\n\nReturn only the sentence.`;
+
+  const payload = {
+    model: GROQ_MODEL,
+    messages: [
+      { role: "system", content: "You are a venture capital analyst." },
+      { role: "user", content: prompt },
+    ],
+    temperature: 0.2,
+    max_tokens: 256,
+    response_format: { type: "text" },
+  };
+
+  try {
+    const resp = await axios.post(GROQ_API_URL, payload, {
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      timeout: DEFAULT_TIMEOUT,
+    });
+    const data = resp.data;
+    let textOutput: string | null = null;
+    if (data?.choices && data.choices[0]) {
+      const choice = data.choices[0];
+      textOutput = choice.message?.content ?? choice.text ?? null;
+    }
+    if (!textOutput && typeof data === "string") {
+      textOutput = data;
+    }
+    if (!textOutput && data && typeof data === "object") {
+      textOutput = JSON.stringify(data);
+    }
+    if (!textOutput) {
+      throw new Error("Groq returned empty response");
+    }
+    return textOutput.trim();
+  } catch (err) {
+    console.error("analyzeTeamRoleImportanceLLM error:", err);
+    return "AI analysis unavailable due to API error.";
+  }
+}
 import axios from "axios";
 import { retrieveRelevantContext } from "./ragRetriever.js";
 import { DocumentChunk, GroqResponse, StartupMetadata, FounderVerificationResult } from "../types/index.js";

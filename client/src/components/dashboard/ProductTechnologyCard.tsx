@@ -1,17 +1,57 @@
+
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Cpu, CheckCircle, AlertTriangle, Shield } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+
+interface ProductTechSignals {
+  sector: 'healthtech' | 'saas' | 'fintech' | 'unknown';
+  productSummary: string;
+  polishedSummary: string;
+  keyMetrics: Record<string, string | number>;
+  defensibility: { pros: string[]; cons: string[] };
+  rawEvidence: Array<{ section: string; snippet: string }>;
+}
 
 const ProductTechnologyCard = () => {
-  const techStack = [
-    'React', 'Node.js', 'PostgreSQL', 'AWS', 'TensorFlow', 'Python', 'Redis', 'Kubernetes'
-  ];
+  const { startupId } = useParams();
+  const [signals, setSignals] = useState<ProductTechSignals | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const readinessData = [
-    { metric: 'MVP Built', status: 'Yes', positive: true },
-    { metric: 'Paying Users', status: 'Yes (120+)', positive: true },
-    { metric: 'AI Dependency', status: 'Medium', positive: null },
-    { metric: 'Differentiation', status: 'High', positive: true },
-  ];
+  useEffect(() => {
+    if (!startupId) return;
+    setLoading(true);
+    fetch(`/api/startup/${startupId}/product-tech`)
+      .then(res => {
+        if (!res.ok) throw new Error('No product/tech data found');
+        return res.json();
+      })
+      .then(data => {
+        setSignals(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [startupId]);
+
+  if (loading) {
+    return (
+      <motion.div className="bg-card rounded-2xl border border-border shadow-lg p-6 text-center text-muted-foreground">
+        Loading product & technology signals...
+      </motion.div>
+    );
+  }
+
+  if (error || !signals) {
+    return (
+      <motion.div className="bg-card rounded-2xl border border-border shadow-lg p-6 text-center text-muted-foreground">
+        No product or technology data available for this startup.
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -25,86 +65,74 @@ const ProductTechnologyCard = () => {
         Product & Technology
       </h2>
 
-      {/* Product Overview */}
+      {/* Polished Product Summary */}
       <div className="mb-4">
         <p className="text-sm text-muted-foreground leading-relaxed">
-          TechFlow AI is a cloud-based workflow automation platform that uses proprietary ML models 
-          to learn and replicate complex business processes. The product features intelligent task 
-          routing, predictive resource allocation, and automated compliance checking. Built on a 
-          modern microservices architecture with 99.9% uptime SLA.
+          {signals.polishedSummary || signals.productSummary || 'No product summary available.'}
         </p>
       </div>
 
-      {/* Tech Stack Pills */}
-      <div className="mb-4">
-        <p className="text-sm font-medium text-foreground mb-2">Tech Stack</p>
-        <div className="flex flex-wrap gap-2">
-          {techStack.map((tech) => (
-            <span 
-              key={tech}
-              className="px-3 py-1 rounded-full bg-secondary/10 text-secondary text-xs font-medium"
-            >
-              {tech}
-            </span>
-          ))}
+      {/* Key Metrics Table */}
+      {signals.keyMetrics && Object.keys(signals.keyMetrics).length > 0 && (
+        <div className="mb-4 rounded-xl border border-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-muted/50">
+                <th className="text-left p-3 font-medium text-foreground">Metric</th>
+                <th className="text-right p-3 font-medium text-foreground">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(signals.keyMetrics).map(([metric, value]) => (
+                <tr key={metric} className="border-t border-border">
+                  <td className="p-3 text-muted-foreground">{metric}</td>
+                  <td className="p-3 text-right text-foreground">{value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
+      )}
 
-      {/* Defensibility */}
+      {/* Defensibility Pros/Cons */}
       <div className="mb-4 p-4 rounded-xl bg-muted/50 space-y-2">
         <p className="text-sm font-medium text-foreground flex items-center gap-2">
           <Shield className="h-4 w-4 text-secondary" />
-          Defensibility Notes
+          Defensibility
         </p>
-        <ul className="space-y-2">
-          <li className="flex items-start gap-2">
-            <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-            <span className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Data Moat:</span> Proprietary dataset of 10M+ workflow patterns
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
-            <span className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">IP Protection:</span> 2 patents pending on ML optimization algorithms
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
-            <span className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">AI Dependency:</span> Core models require ongoing training investment
-            </span>
-          </li>
-        </ul>
+        <div className="flex flex-col md:flex-row gap-6">
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-success mb-1 flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Pros</p>
+            <ul className="list-disc ml-5 space-y-1">
+              {signals.defensibility.pros.length > 0 ? signals.defensibility.pros.map((pro, i) => (
+                <li key={i} className="text-xs text-muted-foreground">{pro}</li>
+              )) : <li className="text-xs text-muted-foreground">Not specified</li>}
+            </ul>
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-destructive mb-1 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Cons</p>
+            <ul className="list-disc ml-5 space-y-1">
+              {signals.defensibility.cons.length > 0 ? signals.defensibility.cons.map((con, i) => (
+                <li key={i} className="text-xs text-muted-foreground">{con}</li>
+              )) : <li className="text-xs text-muted-foreground">Not specified</li>}
+            </ul>
+          </div>
+        </div>
       </div>
 
-      {/* Product Readiness Table */}
-      <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/50">
-              <th className="text-left p-3 font-medium text-foreground">Metric</th>
-              <th className="text-right p-3 font-medium text-foreground">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {readinessData.map((row, i) => (
-              <tr key={i} className="border-t border-border">
-                <td className="p-3 text-muted-foreground">{row.metric}</td>
-                <td className="p-3 text-right">
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${
-                    row.positive === true ? 'bg-success/10 text-success' : 
-                    row.positive === false ? 'bg-destructive/10 text-destructive' : 
-                    'bg-warning/10 text-warning'
-                  }`}>
-                    {row.status}
-                  </span>
-                </td>
-              </tr>
+      {/* Evidence (for explainability) */}
+      {signals.rawEvidence && signals.rawEvidence.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Evidence</p>
+          <ul className="list-disc ml-5 space-y-1">
+            {signals.rawEvidence.map((ev, i) => (
+              <li key={i} className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">[{ev.section}]</span> {ev.snippet}
+              </li>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </ul>
+        </div>
+      )}
     </motion.div>
   );
 };

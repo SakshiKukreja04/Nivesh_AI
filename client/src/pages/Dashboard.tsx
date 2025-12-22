@@ -94,13 +94,36 @@ const Dashboard = () => {
   const [founderVerification, setFounderVerification] = useState<FounderVerification | null>(null);
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
 
-  const startupData = {
-    name: 'TechFlow AI',
-    stage: 'Series A',
-    sector: 'SaaS',
-    decision: 'proceed' as const,
-    confidenceScore: 87,
-  };
+  // Extracted startup metadata and claims (replace with real API data)
+  const [startupMetadata, setStartupMetadata] = useState<any>(null);
+  const [startupClaims, setStartupClaims] = useState<any[]>([]);
+
+  const [executiveSummary, setExecutiveSummary] = useState<string>("");
+  const [marketOpportunity, setMarketOpportunity] = useState<any>(null);
+  useEffect(() => {
+    if (startupId) {
+      // Fetch startup metadata, claims, summary, and market opportunity from backend
+      fetch(`/api/startup/${startupId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.metadata) {
+            setStartupMetadata(data.metadata);
+          }
+          if (data && data.claims) {
+            setStartupClaims(data.claims);
+          }
+          if (data && data.summary) {
+            setExecutiveSummary(data.summary);
+          }
+          if (data && data.marketOpportunity) {
+            setMarketOpportunity(data.marketOpportunity);
+          }
+        })
+        .catch(err => {
+          console.error('[Dashboard] Error fetching startup metadata/claims:', err);
+        });
+    }
+  }, [startupId]);
 
   useEffect(() => {
     if (startupId) {
@@ -169,13 +192,13 @@ const Dashboard = () => {
                   <Building2 className="h-7 w-7 text-secondary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-foreground">{startupData.name}</h1>
+                  <h1 className="text-2xl font-bold text-foreground">{startupMetadata?.name || 'Startup'}</h1>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="px-2 py-0.5 rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                      {startupData.stage}
+                      {startupMetadata?.stage || 'N/A'}
                     </span>
                     <span className="px-2 py-0.5 rounded-full bg-secondary/10 text-xs font-medium text-secondary">
-                      {startupData.sector}
+                      {startupMetadata?.sector || 'N/A'}
                     </span>
                   </div>
                 </div>
@@ -183,7 +206,7 @@ const Dashboard = () => {
 
               <div className="flex flex-wrap items-center gap-6">
                 {/* PDF Export */}
-                <PDFExportButton startupData={startupData} />
+                <PDFExportButton startupData={startupMetadata} />
 
                 {/* Decision Badge */}
                 <div className="flex flex-col items-center">
@@ -212,7 +235,7 @@ const Dashboard = () => {
                         strokeWidth="8"
                         strokeLinecap="round"
                         initial={{ strokeDasharray: '0 251' }}
-                        animate={{ strokeDasharray: `${startupData.confidenceScore * 2.51} 251` }}
+                        animate={{ strokeDasharray: `${(startupMetadata?.confidenceScore || 0) * 2.51} 251` }}
                         transition={{ duration: 1.5, delay: 0.5, ease: 'easeOut' }}
                       />
                     </svg>
@@ -223,7 +246,7 @@ const Dashboard = () => {
                         animate={{ opacity: 1 }}
                         transition={{ delay: 1 }}
                       >
-                        {startupData.confidenceScore}
+                        {startupMetadata?.confidenceScore || 'N/A'}
                       </motion.span>
                     </div>
                   </div>
@@ -252,11 +275,7 @@ const Dashboard = () => {
                   Executive Summary
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  TechFlow AI is a B2B SaaS platform that automates workflow management using 
-                  proprietary machine learning models. The founding team has strong credentials 
-                  with two prior exits in the enterprise software space. The company has demonstrated 
-                  strong product-market fit with 40% month-over-month growth and 92% customer retention. 
-                  Key risks include limited runway and concentration in the SMB segment.
+                  {executiveSummary || "No summary available."}
                 </p>
                 <div className="mt-4 flex gap-2">
                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-success/10 text-success text-xs font-medium">
@@ -271,7 +290,7 @@ const Dashboard = () => {
                 </div>
               </motion.div>
 
-              {/* Startup Snapshot */}
+              {/* Startup Snapshot - dynamic metadata and claims */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -282,29 +301,60 @@ const Dashboard = () => {
                   <Target className="h-5 w-5 text-secondary" />
                   Startup Snapshot
                 </h2>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {[
-                    { icon: Globe, label: 'Location', value: 'San Francisco, CA' },
-                    { icon: Calendar, label: 'Founded', value: '2022' },
-                    { icon: DollarSign, label: 'Funding', value: '$2.5M Seed' },
-                    { icon: Users, label: 'Team Size', value: '15 employees' },
-                  ].map(({ icon: Icon, label, value }) => (
-                    <div key={label} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                      <Icon className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">{label}</p>
-                        <p className="font-medium text-foreground">{value}</p>
+                {startupMetadata ? (
+                  <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                    {[
+                      { label: 'Startup Name', value: startupMetadata.startupName },
+                      { label: 'Location', value: startupMetadata.location },
+                      { label: 'Stage', value: startupMetadata.stage },
+                      { label: 'Sector', value: startupMetadata.sector },
+                      { label: 'Business Model', value: startupMetadata.businessModel },
+                      { label: 'Website', value: startupMetadata.website },
+                      { label: 'Funding Raised', value: startupMetadata.fundingRaised },
+                      { label: 'Team Size', value: startupMetadata.teamSize },
+                      { label: 'Additional Notes', value: startupMetadata.additionalNotes },
+                      { label: 'Role', value: startupMetadata.role },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                        <span className="text-xs text-muted-foreground font-semibold">{label}</span>
+                        <span className="font-medium text-foreground">{value ? String(value) : 'N/A'}</span>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">No metadata found.</div>
+                )}
+                <h3 className="text-sm font-semibold text-foreground mb-2 mt-2">Extracted Claims</h3>
+                {startupClaims && startupClaims.length > 0 ? (
+                  <ul className="list-disc ml-6">
+                    {startupClaims.map((claim, idx) => (
+                      <li key={idx} className="text-xs text-muted-foreground">
+                        <span className="font-semibold">{claim.claim}:</span> {claim.value ? claim.value : ''}
+                        {claim.confidence && (
+                          <span className="ml-2 text-[10px] text-success">(Confidence: {claim.confidence})</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-xs text-muted-foreground">No claims extracted.</div>
+                )}
               </motion.div>
 
               {/* Founder & Team - Expanded */}
-              <FounderTeamCard founderVerification={founderVerification} />
+              <FounderTeamCard founderVerification={founderVerification} teamInfo={teamInfo} />
 
               {/* Market Opportunity */}
-              <MarketOpportunityCard />
+              <MarketOpportunityCard
+                metrics={marketOpportunity ? [
+                  { metric: 'TAM (Validated)', value: marketOpportunity.validatedTAM ? `$${marketOpportunity.validatedTAM.toLocaleString()}` : 'N/A', status: 'verified' },
+                  { metric: 'SAM', value: marketOpportunity.SAM ? `$${marketOpportunity.SAM.toLocaleString()}` : 'N/A', status: 'verified' },
+                  { metric: 'SOM (Year 3)', value: marketOpportunity.SOM ? `$${marketOpportunity.SOM.toLocaleString()}` : 'N/A', status: 'projected' },
+                  { metric: 'Market Growth Rate', value: marketOpportunity.growthRate ? `${marketOpportunity.growthRate}% CAGR` : 'N/A', status: 'positive' },
+                ] : []}
+                problemClarity={marketOpportunity?.problemClarity}
+                aiMarketAnalysis={marketOpportunity?.aiMarketAnalysis}
+              />
 
               {/* Product & Technology */}
               <ProductTechnologyCard />

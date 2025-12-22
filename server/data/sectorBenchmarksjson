@@ -1,0 +1,26 @@
+{
+  "SaaS": {
+    "india": {
+      "avgTAM": 40000000000,
+      "minTAM": 5000000000,
+      "maxReasonableTAM": 100000000000,
+      "growthRate": 0.23
+    }
+  },
+  "Fintech": {
+    "india": {
+      "avgTAM": 50000000000,
+      "minTAM": 8000000000,
+      "maxReasonableTAM": 120000000000,
+      "growthRate": 0.25
+    }
+  },
+  "Healthtech": {
+    "india": {
+      "avgTAM": 30000000000,
+      "minTAM": 4000000000,
+      "maxReasonableTAM": 80000000000,
+      "growthRate": 0.21
+    }
+  }
+}

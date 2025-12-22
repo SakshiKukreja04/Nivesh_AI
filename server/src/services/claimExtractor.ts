@@ -8,9 +8,13 @@ export function extractClaims(chunks: DocumentChunk[]): StartupClaims[] {
   const claims: StartupClaims[] = [];
 
   for (const chunk of chunks) {
+    console.log(`[CLAIM-EXTRACTOR] Processing chunk ${chunk.id}:`, chunk.text.slice(0, 200));
     const chunkClaims = extractClaimsFromChunk(chunk);
     if (chunkClaims.length > 0) {
+      console.log(`[CLAIM-EXTRACTOR] Claims found:`, JSON.stringify(chunkClaims, null, 2));
       claims.push(...chunkClaims.map(claim => ({ ...claim, sourceChunk: chunk.id, claim: Object.keys(claim)[0] })));
+    } else {
+      console.log(`[CLAIM-EXTRACTOR] No claims found in chunk ${chunk.id}`);
     }
   }
 

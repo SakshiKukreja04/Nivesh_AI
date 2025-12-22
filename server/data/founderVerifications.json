@@ -92,5 +92,249 @@
       ]
     },
     "redFlags": []
+  },
+  "paynexa-": {
+    "startupId": "paynexa-",
+    "role": "Founder",
+    "founderStrengthScore": 9.5,
+    "signals": {
+      "experienceYears": 12,
+      "pastCompanies": [
+        "PayNexa Technologies",
+        "Razorpay",
+        "Paytm",
+        "X",
+        "PayNexa",
+        "Cred"
+      ],
+      "roles": [
+        "Founder",
+        "CEO",
+        "architect",
+        "Product Manager",
+        "Engineer",
+        "Aarav Mehta Founder & CEO",
+        "Lending Professional Summary Founder",
+        "Experience Founder & CEO",
+        "Tech in Computer Engineering"
+      ],
+      "education": [
+        "B.Tech Co from IIT",
+        "B.Tech Co from IIT Bombay"
+      ],
+      "domainAlignment": [
+        "AI/ML",
+        "Fintech"
+      ]
+    },
+    "redFlags": []
+  },
+  "paynexa": {
+    "startupId": "paynexa",
+    "role": "Founder",
+    "founderStrengthScore": 9.5,
+    "signals": {
+      "experienceYears": 12,
+      "pastCompanies": [
+        "PayNexa Technologies",
+        "Razorpay",
+        "Paytm",
+        "X",
+        "PayNexa",
+        "Cred"
+      ],
+      "roles": [
+        "Founder",
+        "CEO",
+        "architect",
+        "Product Manager",
+        "Engineer",
+        "Aarav Mehta Founder & CEO",
+        "Lending Professional Summary Founder",
+        "Experience Founder & CEO",
+        "Tech in Computer Engineering"
+      ],
+      "education": [
+        "B.Tech Co from IIT",
+        "B.Tech Co from IIT Bombay"
+      ],
+      "domainAlignment": [
+        "AI/ML",
+        "Fintech"
+      ]
+    },
+    "redFlags": []
+  },
+  "fradel-and-spies": {
+    "startupId": "fradel-and-spies",
+    "role": "Founder",
+    "founderStrengthScore": 8,
+    "signals": {
+      "experienceYears": 0,
+      "pastCompanies": [
+        "Deep awareness of key fintech",
+        "simplifies financial services and enables",
+        "Intel",
+        "X"
+      ],
+      "roles": [
+        "FOUNDER",
+        "CEO",
+        "Founder",
+        "Founded and leading a fintech venture focused on transforming finance through technology"
+      ],
+      "education": [],
+      "domainAlignment": [
+        "SaaS",
+        "AI/ML",
+        "Fintech"
+      ]
+    },
+    "redFlags": []
+  },
+  "healium": {
+    "startupId": "healium",
+    "role": "Founder",
+    "founderStrengthScore": 9.5,
+    "signals": {
+      "experienceYears": 30,
+      "pastCompanies": [
+        "X"
+      ],
+      "roles": [
+        "Founder",
+        "Director",
+        "Consultant",
+        "CTO",
+        "Founder & Managing Director"
+      ],
+      "education": [
+        "NIT"
+      ],
+      "domainAlignment": [
+        "AI/ML",
+        "Healthtech"
+      ]
+    },
+    "redFlags": [],
+    "name": "Founder Description"
+  },
+  "techflow-ai": {
+    "startupId": "techflow-ai",
+    "role": "Founder",
+    "founderStrengthScore": 9.5,
+    "signals": {
+      "experienceYears": 30,
+      "pastCompanies": [
+        "X"
+      ],
+      "roles": [
+        "Founder",
+        "Director",
+        "Consultant",
+        "CTO",
+        "Founder & Managing Director"
+      ],
+      "education": [
+        "NIT"
+      ],
+      "domainAlignment": [
+        "AI/ML",
+        "Healthtech"
+      ]
+    },
+    "redFlags": [],
+    "name": "Founder Description"
+  },
+  "meditrack": {
+    "startupId": "meditrack",
+    "role": "Founder",
+    "founderStrengthScore": 8,
+    "signals": {
+      "experienceYears": 7,
+      "pastCompanies": [
+        "MediTrack HealthTech",
+        "a multi",
+        "X"
+      ],
+      "roles": [
+        "Founder",
+        "CTO",
+        "Consultant",
+        "Founder Resume",
+        "Founder & Chief Medical Officer",
+        "Senior Consultant"
+      ],
+      "education": [
+        "Not disclosed in pitch deck or resume"
+      ],
+      "domainAlignment": [
+        "AI/ML",
+        "Healthtech"
+      ]
+    },
+    "redFlags": [],
+    "name": "Founder Resume"
+  },
+  "uber": {
+    "startupId": "uber",
+    "role": "Founder",
+    "founderStrengthScore": 9.5,
+    "signals": {
+      "experienceYears": 12,
+      "pastCompanies": [
+        "RideScale Technologies",
+        "Uber",
+        "X"
+      ],
+      "roles": [
+        "FOUNDER",
+        "Founder",
+        "CEO",
+        "Co-Founder",
+        "architect",
+        "Engineer",
+        "founder"
+      ],
+      "education": [
+        "Bachelor Sc from UCLA"
+      ],
+      "domainAlignment": [
+        "AI/ML",
+        "E-commerce"
+      ]
+    },
+    "redFlags": [],
+    "name": "Mobility Pitch"
+  },
+  "carepulse": {
+    "startupId": "carepulse",
+    "role": "Founder",
+    "founderStrengthScore": 7,
+    "signals": {
+      "experienceYears": 0,
+      "pastCompanies": [
+        "Apollo Hospitals, currently building a te"
+      ],
+      "roles": [
+        "Founder",
+        "CEO",
+        "engineer",
+        "manager",
+        "CTO"
+      ],
+      "education": [
+        "Me in dicine",
+        "Me in dicine All India Institute of Medical Sciences",
+        "Bachelor in of Medicine from , Bachelor of Surgery"
+      ],
+      "domainAlignment": [
+        "SaaS",
+        "AI/ML",
+        "Healthtech"
+      ]
+    },
+    "redFlags": [],
+    "name": "Ananya Mehta"
   }
 }

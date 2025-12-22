@@ -1,26 +1,135 @@
-import express, { Request, Response } from "express";
-import cors from "cors";
+
 import dotenv from "dotenv";
+dotenv.config();
+import express, { Request, Response, NextFunction } from "express";
+import cors from "cors";
 import multer from "multer";
-import fs from "fs/promises";
+import fs from "fs";
+import { promises as fsPromises } from "fs";
 import path from "path";
 import { processUploadedFile, detectFileType } from "./utils/fileUtils.js";
 import { processAndStoreDocuments } from "./services/documentProcessor.js";
 import { analyzeWithRAG } from "./services/groqAnalyzer.js";
 import ragRouter from "./routes/ragQuery.route.js";
+import productTechRouter from './routes/productTech.route.js';
+import { extractProductTechSignals } from './services/productTechExtractor.js';
+import { polishProductTechWithGroq } from './services/productTechGroqAnalyzer.js';
+console.log('GROQ_API_KEY:', process.env.GROQ_API_KEY);
+console.log('GROQ_API_URL:', process.env.GROQ_API_URL);
+
+// Ensure DATA_DIR is declared before use
+const DATA_DIR = path.resolve("./data");
+
+const PRODUCT_TECH_FILE = path.join(DATA_DIR, 'productTech.json');
+
+function loadProductTech() {
+    try {
+        if (!fs.existsSync(PRODUCT_TECH_FILE)) return {};
+        return JSON.parse(fs.readFileSync(PRODUCT_TECH_FILE, 'utf-8'));
+    } catch {
+        return {};
+    }
+}
+function saveProductTech(startupId: string, signals: any) {
+    const all = loadProductTech();
+    all[startupId] = signals;
+    fs.writeFileSync(PRODUCT_TECH_FILE, JSON.stringify(all, null, 2));
+}
+
 import { ProcessedFile, StartupMetadata, FounderVerificationResult, TeamInfo } from "./types/index.js";
 import { extractClaims } from "./services/claimExtractor.js";
+
+import { validateMarketOpportunity, MarketOpportunityInput, MarketOpportunityValidationResult } from "./services/marketOpportunityValidator.js";
+const MARKET_OPPORTUNITY_FILE = path.join(DATA_DIR, "marketOpportunity.json");
+
+async function loadMarketOpportunities(): Promise<Record<string, MarketOpportunityValidationResult>> {
+    try {
+        const data = await fsPromises.readFile(MARKET_OPPORTUNITY_FILE, "utf-8");
+        return JSON.parse(data);
+    } catch (err) {
+        return {};
+    }
+}
+
+async function saveMarketOpportunity(startupId: string, result: MarketOpportunityValidationResult): Promise<void> {
+    try {
+        const allResults = await loadMarketOpportunities();
+        allResults[startupId] = result;
+        await fsPromises.writeFile(MARKET_OPPORTUNITY_FILE, JSON.stringify(allResults, null, 2));
+        console.log(`[SAVE-MARKET-OPPORTUNITY] Saved for ${startupId}`);
+    } catch (err) {
+        console.error("[SAVE-MARKET-OPPORTUNITY] Error saving:", err);
+    }
+}
 import { parseResumePDF } from "./utils/resumeParser.js";
+
 import { extractResumeSignals } from "./services/resumeSignalExtractor.js";
 import { extractTeamInfo } from "./services/teamExtractor.js";
-
-const DATA_DIR = path.resolve("./data");
 const FOUNDER_VERIFICATIONS_FILE = path.join(DATA_DIR, "founderVerifications.json");
 const TEAM_INFO_FILE = path.join(DATA_DIR, "teamInfo.json");
 
+const app = express();
+
+// Get startup metadata, claims, and summary by startup ID
+app.get("/api/startup/:startupId", async (req: Request, res: Response) => {
+    const { startupId } = req.params;
+    try {
+        // Load metadata from startups.json
+        const startupsPath = path.join(DATA_DIR, "startups.json");
+        let metadata = {};
+        if (fs.existsSync(startupsPath)) {
+            const startupsArr = JSON.parse(fs.readFileSync(startupsPath, "utf-8"));
+            const found = startupsArr.find((s: any) => (s.id === startupId || (s.metadata && s.metadata.name?.toLowerCase().replace(/\s+/g, "-") === startupId)));
+            if (found && found.metadata) metadata = found.metadata;
+        }
+
+        // Load claims from claims.json (if exists)
+        let claims: any[] = [];
+        const claimsPath = path.join(DATA_DIR, "claims.json");
+        if (fs.existsSync(claimsPath)) {
+            const allClaims = JSON.parse(fs.readFileSync(claimsPath, "utf-8"));
+            if (allClaims[startupId]) claims = allClaims[startupId];
+        }
+
+        // Load summary from analysis.json (if exists)
+        let summary = "";
+        const analysisPath = path.join(DATA_DIR, "analysis.json");
+        if (fs.existsSync(analysisPath)) {
+            const allAnalysis = JSON.parse(fs.readFileSync(analysisPath, "utf-8"));
+            if (allAnalysis[startupId] && allAnalysis[startupId].summary) summary = allAnalysis[startupId].summary;
+        }
+
+        // Load market opportunity validation result
+        let marketOpportunity = undefined;
+        try {
+            const allMarketOpp = await loadMarketOpportunities();
+            if (allMarketOpp[startupId]) marketOpportunity = allMarketOpp[startupId];
+        } catch (e) {
+            console.warn(`[STARTUP-GET] Could not load market opportunity for ${startupId}`);
+        }
+
+        // Load product/tech signals
+        let productTech = undefined;
+        try {
+            const productTechPath = path.join(DATA_DIR, "productTech.json");
+            if (fs.existsSync(productTechPath)) {
+                const allProductTech = JSON.parse(fs.readFileSync(productTechPath, "utf-8"));
+                if (allProductTech[startupId]) productTech = allProductTech[startupId];
+            }
+        } catch (e) {
+            console.warn(`[STARTUP-GET] Could not load product/tech for ${startupId}`);
+        }
+
+        return res.json({ success: true, metadata, claims, summary, marketOpportunity, productTech });
+    } catch (err) {
+        console.error(`[STARTUP-GET] ERROR:`, err);
+        return res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
+
 async function ensureDataDir(): Promise<void> {
     try {
-        await fs.mkdir(DATA_DIR, { recursive: true });
+        await fsPromises.mkdir(DATA_DIR, { recursive: true });
     } catch (err) {
         console.error("Failed to create data directory:", err);
     }
@@ -28,7 +137,7 @@ async function ensureDataDir(): Promise<void> {
 
 async function loadFounderVerifications(): Promise<Record<string, FounderVerificationResult>> {
     try {
-        const data = await fs.readFile(FOUNDER_VERIFICATIONS_FILE, "utf-8");
+        const data = await fsPromises.readFile(FOUNDER_VERIFICATIONS_FILE, "utf-8");
         return JSON.parse(data);
     } catch (err) {
         return {};
@@ -40,7 +149,7 @@ async function saveFounderVerification(verification: FounderVerificationResult):
         console.log(`[SAVE-VERIFICATION] Saving verification for startupId: ${verification.startupId}`);
         const verifications = await loadFounderVerifications();
         verifications[verification.startupId] = verification;
-        await fs.writeFile(FOUNDER_VERIFICATIONS_FILE, JSON.stringify(verifications, null, 2));
+        await fsPromises.writeFile(FOUNDER_VERIFICATIONS_FILE, JSON.stringify(verifications, null, 2));
         console.log(`[SAVE-VERIFICATION] Successfully saved verification. File contains ${Object.keys(verifications).length} entries.`);
         console.log(`[SAVE-VERIFICATION] Saved data JSON:`, JSON.stringify(verification, null, 2));
     } catch (err) {
@@ -53,7 +162,7 @@ async function saveFounderVerification(verification: FounderVerificationResult):
 
 async function loadTeamInfo(): Promise<Record<string, TeamInfo>> {
     try {
-        const data = await fs.readFile(TEAM_INFO_FILE, "utf-8");
+        const data = await fsPromises.readFile(TEAM_INFO_FILE, "utf-8");
         return JSON.parse(data);
     } catch (err) {
         return {};
@@ -65,7 +174,7 @@ async function saveTeamInfo(startupId: string, teamInfo: TeamInfo): Promise<void
         console.log(`[SAVE-TEAM-INFO] Saving team info for startupId: ${startupId}`);
         const allTeamInfo = await loadTeamInfo();
         allTeamInfo[startupId] = teamInfo;
-        await fs.writeFile(TEAM_INFO_FILE, JSON.stringify(allTeamInfo, null, 2));
+        await fsPromises.writeFile(TEAM_INFO_FILE, JSON.stringify(allTeamInfo, null, 2));
         console.log(`[SAVE-TEAM-INFO] Successfully saved team info. File contains ${Object.keys(allTeamInfo).length} entries.`);
         console.log(`[SAVE-TEAM-INFO] Saved data JSON:`, JSON.stringify(teamInfo, null, 2));
     } catch (err) {
@@ -78,12 +187,13 @@ async function saveTeamInfo(startupId: string, teamInfo: TeamInfo): Promise<void
 
 ensureDataDir();
 dotenv.config();
-const app = express();
+import { analyzeTeamRoleImportanceLLM } from "./services/groqAnalyzer.js";
+// (removed duplicate import fs from "fs")
 app.use(cors());
 app.use(express.json());
 
 // Add request logging middleware (must be before routes)
-app.use((req, _res, next) => {
+app.use((req: Request, _res: Response, next: NextFunction) => {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] ${req.method} ${req.path}`);
     // Safely check req.body - it might be undefined or null for multipart/form-data requests
@@ -92,8 +202,8 @@ app.use((req, _res, next) => {
             console.log(`  Body:`, JSON.stringify(req.body, null, 2).substring(0, 200));
         }
     }
-    if (req.files) {
-        const fileInfo = Object.entries(req.files as { [key: string]: Express.Multer.File[] }).map(([key, files]) => 
+    if ((req as any).files) {
+        const fileInfo = Object.entries((req as any).files as { [key: string]: Express.Multer.File[] }).map(([key, files]) => 
             `${key}: ${files[0]?.originalname || 'none'} (${files[0]?.size || 0} bytes)`
         ).join(', ');
         console.log(`  Files: ${fileInfo}`);
@@ -150,6 +260,33 @@ app.post("/api/analyze",
             const startupId = metadata.startupName?.toLowerCase().replace(/\s+/g, "-") || `startup-${Date.now()}`;
             console.log(`[ANALYZE] Startup ID: ${startupId}`);
 
+                        // === Product/Tech Extraction and Save ===
+                        // Try to extract product/tech signals from pitch deck text (if available)
+                        let productTechSignals = null;
+                        const pitchDeckText = processedFiles.find(f => f.fileType === 'pdf' || f.fileType === 'pptx')?.text || '';
+                        if (pitchDeckText && pitchDeckText.length > 30) {
+                            // Naive section splitter: split by lines with ALL CAPS or numbers (simulate sections)
+                            const sectionChunks = pitchDeckText
+                                .split(/\n(?=[A-Z0-9 .\-]{5,}\n)/)
+                                .map((chunk, i) => ({ section: `Section ${i + 1}`, text: chunk.trim() }))
+                                .filter(c => c.text.length > 30);
+                            if (sectionChunks.length > 0) {
+                                const extracted = extractProductTechSignals(pitchDeckText, sectionChunks);
+                                try {
+                                    const groq = await polishProductTechWithGroq(extracted);
+                                    productTechSignals = { ...extracted, ...groq };
+                                    saveProductTech(startupId, productTechSignals);
+                                    console.log(`[ANALYZE] Product/Tech signals extracted and saved.`);
+                                } catch (err) {
+                                    console.error(`[ANALYZE] Product/Tech Groq error:`, err);
+                                }
+                            } else {
+                                console.log(`[ANALYZE] No section chunks found for product/tech extraction.`);
+                            }
+                        } else {
+                            console.log(`[ANALYZE] No pitch deck text for product/tech extraction.`);
+                        }
+
             // Extract team information from pitch deck
             let teamInfo: TeamInfo | null = null;
             const pitchDeckFile = files["pitchDeck"]?.[0];
@@ -185,7 +322,7 @@ app.post("/api/analyze",
                 console.log(`[ANALYZE] No pitch deck file provided for team extraction`);
             }
 
-            // Process CV if provided
+            // Process CV if provided, else try pitch deck for founder verification
             let founderVerification: FounderVerificationResult | null = null;
             const cvFile = files["cv"]?.[0];
             if (cvFile) {
@@ -196,8 +333,8 @@ app.post("/api/analyze",
                         const resumeText = await parseResumePDF(cvFile.buffer);
                         if (resumeText && resumeText.trim().length > 0) {
                             console.log(`[ANALYZE] Resume text extracted: ${resumeText.length} characters`);
-                            const role = (req.body.role as string) || "Founder";
-                            founderVerification = extractResumeSignals(resumeText, startupId, role);
+                            const role = (req.body && (req.body as any).role as string) || "Founder";
+                            founderVerification = await extractResumeSignals(resumeText, startupId, role);
                             await saveFounderVerification(founderVerification);
                             console.log(`[ANALYZE] Founder verification completed:`);
                             console.log(JSON.stringify(founderVerification, null, 2));
@@ -214,8 +351,27 @@ app.post("/api/analyze",
                     console.log(`[ANALYZE] WARNING: CV file is not PDF (${cvFile.mimetype})`);
                 }
             } else {
-                console.log(`[ANALYZE] No CV file provided`);
+                console.log(`[ANALYZE] No CV file provided. Attempting to extract founder verification from pitch deck text...`);
+                // Try to extract from pitch deck text if available
+                const pitchDeckText = processedFilesWithKeys.find(f => f.fileKey === "pitchDeck")?.text || "";
+                if (pitchDeckText && pitchDeckText.trim().length > 0) {
+                    try {
+                        const role = (req.body && (req.body as any).role as string) || "Founder";
+                        founderVerification = await extractResumeSignals(pitchDeckText, startupId, role);
+                        await saveFounderVerification(founderVerification);
+                        console.log(`[ANALYZE] Founder verification extracted from pitch deck text.`);
+                        console.log(JSON.stringify(founderVerification, null, 2));
+                    } catch (err) {
+                        console.error(`[ANALYZE] ERROR extracting founder verification from pitch deck:`, err);
+                        if (err instanceof Error) {
+                            console.error(`[ANALYZE] Error stack:`, err.stack);
+                        }
+                    }
+                } else {
+                    console.log(`[ANALYZE] No pitch deck text available for founder verification extraction.`);
+                }
             }
+
 
             // Extract and log claims from all processed files
             console.log(`[ANALYZE] Processing ${processedFiles.length} files...`);
@@ -225,6 +381,40 @@ app.post("/api/analyze",
             const claims = extractClaims(documentChunks);
             console.log(`[ANALYZE] Extracted ${claims.length} claims`);
             console.log(`[ANALYZE] Claims JSON:`, JSON.stringify(claims, null, 2));
+
+            // Market Opportunity Validation
+            let marketOpportunityResult: MarketOpportunityValidationResult | null = null;
+            try {
+                // Extract required values from claims and metadata
+                const sector = (metadata.sector || "").toLowerCase();
+                let sectorKey: "SaaS" | "Fintech" | "Healthtech" | null = null;
+                if (sector === "saas") sectorKey = "SaaS";
+                if (sector === "fintech") sectorKey = "Fintech";
+                if (sector === "healthtech") sectorKey = "Healthtech";
+                if (sectorKey) {
+                    // Find TAM, SAM, SOM, growthRate from claims (prefer numbers, fallback to 0)
+                    const getClaimValue = (key: string) => {
+                        const found = claims.find(c => c.claim.toLowerCase().includes(key.toLowerCase()));
+                        return typeof found?.value === "number" ? found.value : (typeof found?.[key] === "number" ? found[key] : 0);
+                    };
+                    const TAM = getClaimValue("TAM");
+                    const SAM = getClaimValue("SAM");
+                    const SOM = getClaimValue("SOM");
+                    const growthRate = getClaimValue("growthRate");
+                    if (TAM && SAM && SOM && growthRate) {
+                        const input: MarketOpportunityInput = { sector: sectorKey, TAM, SAM, SOM, growthRate };
+                        marketOpportunityResult = validateMarketOpportunity(input);
+                        await saveMarketOpportunity(startupId, marketOpportunityResult);
+                        console.log(`[ANALYZE] Market Opportunity Validation:`, JSON.stringify(marketOpportunityResult, null, 2));
+                    } else {
+                        console.log(`[ANALYZE] Market Opportunity: Missing required values (TAM/SAM/SOM/growthRate)`);
+                    }
+                } else {
+                    console.log(`[ANALYZE] Market Opportunity: Sector not supported for validation`);
+                }
+            } catch (err) {
+                console.error(`[ANALYZE] Market Opportunity Validation error:`, err);
+            }
 
             // Store documents in vector store for RAG
             console.log(`[ANALYZE] Storing documents in vector store...`);
@@ -237,12 +427,17 @@ app.post("/api/analyze",
             console.log(`[ANALYZE] RAG Analysis JSON:`, JSON.stringify(analysis, null, 2));
 
             const duration = Date.now() - startTime;
-            const responseData = { 
-                success: true, 
-                analysis, 
+            const responseData = {
+                success: true,
+                analysis,
                 startupId,
                 founderVerification: founderVerification || undefined,
-                teamInfo: teamInfo || undefined
+                teamInfo: teamInfo || undefined,
+                claims: claims || [],
+                metadata: metadata || {},
+                summary: analysis?.summary || "",
+                marketOpportunity: marketOpportunityResult || undefined,
+                productTech: productTechSignals || undefined
             };
             
             console.log(`[ANALYZE] Analysis completed in ${duration}ms`);
@@ -262,9 +457,10 @@ app.post("/api/analyze",
 
 // Get founder verification by startup ID
 app.get("/api/founder-verification/:startupId", async (req: Request, res: Response) => {
-    console.log(`[FOUNDER-VERIFICATION] Request for startupId: ${req.params.startupId}`);
+    const params = req.params as { startupId: string };
+    console.log(`[FOUNDER-VERIFICATION] Request for startupId: ${params.startupId}`);
     try {
-        const { startupId } = req.params;
+        const { startupId } = params;
         const verifications = await loadFounderVerifications();
         console.log(`[FOUNDER-VERIFICATION] Available startupIds:`, Object.keys(verifications));
         const verification = verifications[startupId];
@@ -288,21 +484,50 @@ app.get("/api/founder-verification/:startupId", async (req: Request, res: Respon
 
 // Get team info by startup ID
 app.get("/api/team-info/:startupId", async (req: Request, res: Response) => {
-    console.log(`[TEAM-INFO] Request for startupId: ${req.params.startupId}`);
+    const params = req.params as { startupId: string };
+    console.log(`[TEAM-INFO] Request for startupId: ${params.startupId}`);
     try {
-        const { startupId } = req.params;
+        const { startupId } = params;
         const allTeamInfo = await loadTeamInfo();
         console.log(`[TEAM-INFO] Available startupIds:`, Object.keys(allTeamInfo));
         const teamInfo = allTeamInfo[startupId];
-        
+
         if (!teamInfo) {
             console.log(`[TEAM-INFO] Not found for: ${startupId}`);
             return res.status(404).json({ success: false, error: "Team info not found" });
         }
-        
+
+        // Get the domain/sector for AI analysis (fallback to "startup" if not found)
+        let domain = "startup";
+        try {
+            // Try to load metadata if available (optional, not fatal if missing)
+            const metadataPath = `./data/startups.json`;
+            if (fs.existsSync(metadataPath)) {
+                const startups = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
+                if (startups[startupId] && startups[startupId].sector) {
+                    domain = startups[startupId].sector;
+                }
+            }
+        } catch (e) {
+            console.warn(`[TEAM-INFO] Could not load sector/domain for AI analysis:`, e);
+        }
+
+        // Add AI analysis to each team member using LLM
+        const membersWithAI = await Promise.all(
+            teamInfo.members.map(async member => ({
+                ...member,
+                aiAnalysis: await analyzeTeamRoleImportanceLLM(member.role || "", domain)
+            }))
+        );
+
+        const teamInfoWithAI = {
+            ...teamInfo,
+            members: membersWithAI
+        };
+
         console.log(`[TEAM-INFO] Found team info for: ${startupId}`);
-        console.log(`[TEAM-INFO] Team info JSON:`, JSON.stringify(teamInfo, null, 2));
-        return res.json({ success: true, teamInfo });
+        console.log(`[TEAM-INFO] Team info JSON:`, JSON.stringify(teamInfoWithAI, null, 2));
+        return res.json({ success: true, teamInfo: teamInfoWithAI });
     } catch (err) {
         console.error(`[TEAM-INFO] ERROR:`, err);
         if (err instanceof Error) {
@@ -314,6 +539,7 @@ app.get("/api/team-info/:startupId", async (req: Request, res: Response) => {
 
 // RAG query route
 app.use("/api/rag", ragRouter);
+app.use(productTechRouter);
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 app.listen(PORT, () => {

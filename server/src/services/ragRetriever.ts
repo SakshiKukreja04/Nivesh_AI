@@ -1,7 +1,8 @@
-import vectorStore from "./vectorStore.js";
+
 import { generateEmbedding } from "./embeddingService.js";
 import { DocumentChunk } from "../types/index.js";
 import { extractClaims } from "./claimExtractor.js";
+import { LocalVectorStore } from "../vectorstore/LocalVectorStore.js";
 
 const MAX_QUERY_LENGTH = 1000;
 const DEFAULT_TOP_K = 5;
@@ -37,8 +38,9 @@ export async function retrieveRelevantContext(query: string, topK: number = DEFA
       return [];
     }
 
-    // Query vector store for similar documents
-    const results = await vectorStore.query(queryEmbedding, validTopK);
+    // Query vector store for similar documents using LocalVectorStore
+    const localVectorStore = new LocalVectorStore();
+    const results = await localVectorStore.query(queryEmbedding, validTopK);
     
     // Validate results
     if (!Array.isArray(results)) {

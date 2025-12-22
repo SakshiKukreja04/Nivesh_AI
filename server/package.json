@@ -20,6 +20,8 @@
     "express": "^5.2.1",
     "multer": "^2.0.2",
     "pdf-parse": "^2.4.5",
+    "pdf-poppler": "^0.2.3",
+    "tesseract.js": "^7.0.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

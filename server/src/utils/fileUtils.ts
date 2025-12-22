@@ -1,7 +1,28 @@
 import fs from "fs/promises";
 import path from "path";
-import { ProcessedFile } from "../types/index.js";
+import { ProcessedFile } from "../types/index";
 import { PDFParse } from "pdf-parse";
+import Tesseract from "tesseract.js";
+// Use dynamic import for pdf-poppler to support ESM
+let PdfConverter: any;
+async function getPdfConverter() {
+    if (!PdfConverter) {
+        const pdfPoppler = await import("pdf-poppler");
+        // Support both ESM and CommonJS interop
+        PdfConverter = pdfPoppler.PdfConverter || (pdfPoppler.default && pdfPoppler.default.PdfConverter) || pdfPoppler.default;
+    }
+    return PdfConverter;
+}
+// Utility to save analysis summary and metadata to a JSON file in data/uploads
+export async function saveAnalysisSummary(startupId: string, summary: string, metadata: any) {
+    const uploadsDir = path.resolve("./data/uploads");
+    await fs.mkdir(uploadsDir, { recursive: true });
+    const filePath = path.join(uploadsDir, `${startupId}-analysis.json`);
+    const data = { summary, metadata };
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
+    return filePath;
+}
+import os from "os";
 
 const MAX_TEXT_LENGTH = 50000; // Increased for better RAG context
 const UPLOADS_DIR = path.resolve("./data/uploads");
@@ -74,12 +95,45 @@ export async function processUploadedFile(
         switch (type) {
             case "pdf": {
                 try {
+                    // Try to extract text using PDFParse
                     const parser = new PDFParse({ data: file.buffer });
                     const textResult = await parser.getText();
                     text = typeof textResult.text === "string" ? textResult.text : "";
+                    // Log first 500 chars for debugging
+                    console.log("[PDF-Parse] First 500 chars:", text.slice(0, 500));
                 } catch (err) {
-                    console.error("PDF parsing error:", err);
+                    console.error("PDF parsing error (PDF-Parse):", err);
                     text = "";
+                }
+                // If text extraction failed or is empty, fallback to OCR for all pages
+                if (!text || text.trim().length < 1000) {
+                    console.warn("[PDF-Parse] Text is empty or too short. Running OCR fallback for all pages...");
+                    // Save PDF buffer to a temp file
+                    const tmpDir = os.tmpdir();
+                    const tmpPdfPath = path.join(tmpDir, `ocr-fallback-${Date.now()}.pdf`);
+                    await fs.writeFile(tmpPdfPath, file.buffer);
+                    // Dynamically import PdfConverter for ESM compatibility
+                    const PdfConverterClass = await getPdfConverter();
+                    const converter = new PdfConverterClass(tmpPdfPath);
+                    const imageDir = path.join(tmpDir, `ocr-images-${Date.now()}`);
+                    await fs.mkdir(imageDir, { recursive: true });
+                    await converter.convert({ format: 'jpeg', out_dir: imageDir, out_prefix: 'page', page: null });
+                    // Get all image files
+                    const imageFiles = (await fs.readdir(imageDir)).filter(f => f.endsWith('.jpg') || f.endsWith('.jpeg'));
+                    let ocrText = '';
+                    for (const imgFile of imageFiles) {
+                        const imgPath = path.join(imageDir, imgFile);
+                        const ocrResult = await Tesseract.recognize(imgPath, 'eng');
+                        ocrText += ocrResult.data.text + '\n';
+                    }
+                    text = ocrText.trim();
+                    console.log("[OCR] First 500 chars:", text.slice(0, 500));
+                    // Cleanup temp files
+                    try { await fs.unlink(tmpPdfPath); } catch {}
+                    for (const imgFile of imageFiles) {
+                        try { await fs.unlink(path.join(imageDir, imgFile)); } catch {}
+                    }
+                    try { await fs.rmdir(imageDir); } catch {}
                 }
                 break;
             }

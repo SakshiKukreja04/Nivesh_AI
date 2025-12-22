@@ -239,11 +239,6 @@ const Upload = () => {
                         <SelectItem value="saas">SaaS</SelectItem>
                         <SelectItem value="fintech">Fintech</SelectItem>
                         <SelectItem value="healthtech">Healthtech</SelectItem>
-                        <SelectItem value="edtech">Edtech</SelectItem>
-                        <SelectItem value="ecommerce">E-commerce</SelectItem>
-                        <SelectItem value="ai-ml">AI/ML</SelectItem>
-                        <SelectItem value="climate">Climate Tech</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

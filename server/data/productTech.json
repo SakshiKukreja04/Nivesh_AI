@@ -1,0 +1,28 @@
+{
+  "meditrack": {
+    "sector": "healthtech",
+    "productSummary": "",
+    "polishedSummary": "",
+    "keyMetrics": {
+      "users": "."
+    },
+    "defensibility": {
+      "pros": [],
+      "cons": []
+    },
+    "rawEvidence": []
+  },
+  "carepulse": {
+    "sector": "healthtech",
+    "productSummary": "",
+    "polishedSummary": "",
+    "keyMetrics": {
+      "users": "22"
+    },
+    "defensibility": {
+      "pros": [],
+      "cons": []
+    },
+    "rawEvidence": []
+  }
+}

@@ -8,5 +8,79 @@
       }
     ],
     "totalMembers": 1
+  },
+  "paynexa-": {
+    "members": [
+      {
+        "name": "Aarav Mehta",
+        "role": "Product & FinTech leadership CTO"
+      },
+      {
+        "name": "Neha Kulkarni",
+        "role": "Scalable payment systems COO"
+      },
+      {
+        "name": "Rohan Iyer",
+        "role": "COO"
+      },
+      {
+        "name": "Business Model",
+        "role": "Team Member"
+      }
+    ],
+    "totalMembers": 4
+  },
+  "paynexa": {
+    "members": [
+      {
+        "name": "Aarav Mehta",
+        "role": "Product & FinTech leadership CTO"
+      },
+      {
+        "name": "Neha Kulkarni",
+        "role": "Scalable payment systems COO"
+      },
+      {
+        "name": "Rohan Iyer",
+        "role": "COO"
+      },
+      {
+        "name": "Business Model",
+        "role": "Team Member"
+      }
+    ],
+    "totalMembers": 4
+  },
+  "fradel-and-spies": {
+    "members": [
+      {
+        "name": "PayNexa Technologies Pvt",
+        "role": "CEO",
+        "experience": "10 years"
+      },
+      {
+        "name": "PayNexa Technologies",
+        "role": "CEO",
+        "experience": "10 years"
+      }
+    ],
+    "totalMembers": 2
+  },
+  "healium": {
+    "members": [
+      {
+        "name": "Founder Description",
+        "role": "Sakshie Rastogi Co-Founder"
+      },
+      {
+        "name": "Healium Professional Overview Sakshie Rastogi is the Co",
+        "role": "Founder and CEO"
+      },
+      {
+        "name": "Responsible for organizational strategy",
+        "role": "operational lead"
+      }
+    ],
+    "totalMembers": 3
   }
 }

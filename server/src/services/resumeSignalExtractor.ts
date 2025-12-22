@@ -5,65 +5,39 @@ import { FounderSignals, FounderVerificationResult } from '../types/index.js';
  * Looks for patterns like "10 years", "5+ years", "2010-2020", etc.
  */
 function extractExperienceYears(text: string): number {
-  let totalYears = 0;
-
-  // Pattern 1: Direct mentions like "10 years of experience", "5+ years"
-  const yearPatterns = [
-    /(\d+)\+?\s*years?\s*(?:of\s*)?(?:experience|exp|work)/gi,
-    /(?:experience|exp|work)\s*(?:of\s*)?(\d+)\+?\s*years?/gi,
-  ];
-
-  for (const pattern of yearPatterns) {
-    const matches = text.matchAll(pattern);
-    for (const match of matches) {
-      const years = parseInt(match[1] || '0', 10);
-      if (years > 0 && years < 50) {
-        totalYears = Math.max(totalYears, years);
-      }
-    }
+  // 1. Look for "X+ years" in summary and use as cap if found
+  let capYears = 0;
+  const capPattern = /(\d{1,2})\+?\s*years?\s+(?:of\s+)?(?:clinical|work|professional)?\s*experience/i;
+  const capMatch = text.match(capPattern);
+  if (capMatch) {
+    capYears = parseInt(capMatch[1], 10);
   }
 
-  // Pattern 2: Calculate from date ranges (e.g., "2010-2020", "Jan 2015 - Present")
-  const dateRangePattern = /(?:19|20)\d{2}[\s-]*(?:to|–|-|present|now|current)/gi;
-  const dateMatches = Array.from(text.matchAll(dateRangePattern));
-  
-  if (dateMatches.length > 0) {
-    // Extract all years from the text
-    const yearPattern = /(19|20)\d{2}/g;
-    const years: number[] = [];
-    let match;
-    while ((match = yearPattern.exec(text)) !== null) {
-      const year = parseInt(match[0], 10);
-      if (year >= 1970 && year <= new Date().getFullYear()) {
-        years.push(year);
-      }
-    }
-
-    if (years.length >= 2) {
-      const minYear = Math.min(...years);
-      const maxYear = Math.max(...years);
-      const calculatedYears = maxYear - minYear;
-      if (calculatedYears > 0 && calculatedYears < 50) {
-        totalYears = Math.max(totalYears, calculatedYears);
-      }
+  // 2. Parse all job periods, sum only non-overlapping durations
+  const jobPeriods: { start: number, end: number }[] = [];
+  const jobPattern = /([A-Za-z ]+)\n([A-Za-z0-9 .,&-]+)\n([A-Za-z ]+)?\n?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)?\s?(\d{4})\s*[–-]\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Present|Current)?\s?(\d{4})?/gmi;
+  let match;
+  while ((match = jobPattern.exec(text)) !== null) {
+    const startYear = parseInt(match[5], 10);
+    let endYear = match[7] && match[7].toLowerCase().includes('present') ? new Date().getFullYear() : parseInt(match[7], 10);
+    if (!isNaN(startYear)) {
+      if (isNaN(endYear) || endYear < startYear) endYear = new Date().getFullYear();
+      jobPeriods.push({ start: startYear, end: endYear });
     }
   }
-
-  // Pattern 3: Look for "since 2010" patterns
-  const sincePattern = /since\s+(19|20)\d{2}/gi;
-  const sinceMatch = text.match(sincePattern);
-  if (sinceMatch) {
-    const yearMatch = sinceMatch[0].match(/(19|20)\d{2}/);
-    if (yearMatch) {
-      const startYear = parseInt(yearMatch[0], 10);
-      const currentYear = new Date().getFullYear();
-      const yearsSince = currentYear - startYear;
-      if (yearsSince > 0 && yearsSince < 50) {
-        totalYears = Math.max(totalYears, yearsSince);
-      }
+  // Merge overlapping periods
+  jobPeriods.sort((a, b) => a.start - b.start);
+  const merged: { start: number, end: number }[] = [];
+  for (const period of jobPeriods) {
+    if (!merged.length || period.start > merged[merged.length - 1].end) {
+      merged.push({ ...period });
+    } else {
+      merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, period.end);
     }
   }
-
+  let totalYears = merged.reduce((sum, p) => sum + (p.end - p.start), 0);
+  // Use cap if found and less than sum
+  if (capYears > 0 && capYears < totalYears) totalYears = capYears;
   return totalYears;
 }
 
@@ -73,69 +47,26 @@ function extractExperienceYears(text: string): number {
  */
 function extractPastCompanies(text: string): string[] {
   const companies: Set<string> = new Set();
-  const lowerText = text.toLowerCase();
-
-  // Well-known tech companies to look for (including Indian companies)
-  const knownCompanies = [
-    'Google', 'Microsoft', 'Apple', 'Amazon', 'Facebook', 'Meta', 'Netflix',
-    'Salesforce', 'Oracle', 'IBM', 'Adobe', 'Intel', 'Nvidia', 'Tesla',
-    'Uber', 'Airbnb', 'Stripe', 'Palantir', 'Snowflake', 'Databricks',
-    'OpenAI', 'Anthropic', 'GitHub', 'LinkedIn', 'Twitter', 'X',
-    'Razorpay', 'Flipkart', 'PayFlow', 'PayFlow Technologies', 'Infosys', 'TCS', 'Wipro',
-    'Zomato', 'Swiggy', 'Ola', 'Oyo', 'Byju\'s', 'PhonePe', 'Cred', 'Groww',
-  ];
-
-  // Better patterns that look for company names in WORK EXPERIENCE sections
-  // Pattern 1: Company name on its own line (often after role title)
-  const workExpSection = text.match(/(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|CAREER|PROFESSIONAL\s+EXPERIENCE)[\s\S]*?(?=EDUCATION|SKILLS|PROJECTS|$)/i);
-  const workExpText = workExpSection ? workExpSection[0] : text;
-
+  // Only extract companies actually present in the resume
   // Pattern: Company name after role title, often on next line or same line
-  // Example: "Senior Product Manager\nRazorpay Software Pvt Ltd"
-  const roleCompanyPattern = /(?:^|\n)\s*([A-Z][A-Za-z0-9&\s-]{3,40}(?:Inc|LLC|Ltd|Corp|Corporation|Technologies|Tech|Software|Systems|Pvt\s+Ltd|Private\s+Limited)?)\s*(?:\n|$|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d{4})/gm;
-  const roleCompanyMatches = Array.from(workExpText.matchAll(roleCompanyPattern));
-  
-  for (const match of roleCompanyMatches) {
+  const roleCompanyPattern = /\n([A-Z][A-Za-z0-9&.,'\s-]{3,40}(?:Inc|LLC|Ltd|Corp|Corporation|Technologies|Tech|Software|Systems|Pvt\s*Ltd|Private\s*Limited)?)(?:\n|\s|,)/gm;
+  const matches = Array.from(text.matchAll(roleCompanyPattern));
+  for (const match of matches) {
     const company = match[1]?.trim();
-    if (company && company.length > 3 && company.length < 50) {
-      // Filter out common false positives (names, roles, etc.)
-      const excludePatterns = [
-        /^(Founder|CEO|CTO|CFO|COO|VP|Director|Manager|Engineer|Developer|Product|Designer|Analyst|Consultant|Specialist|Lead|Senior|Junior|Associate)/i,
-        /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}/i,
-        /^\d{4}/,
-        /^(The|A|An|This|That|With|From|At|Worked|Employed|Company|Organization)$/i,
-        /^(Present|Current|Previous|Past|Former)$/i,
-      ];
-      
-      const isExcluded = excludePatterns.some(pattern => pattern.test(company));
-      if (!isExcluded && !company.includes('Founder') && !company.includes('CEO') && !company.includes('CTO')) {
-        companies.add(company);
-      }
-    }
-  }
-
-  // Pattern 2: Company name after "at" keyword in experience descriptions
-  const atCompanyPattern = /(?:at|worked\s+at|employed\s+at)\s+([A-Z][A-Za-z0-9&\s-]{3,40}(?:Inc|LLC|Ltd|Corp|Corporation|Technologies|Tech|Software|Systems|Pvt\s+Ltd|Private\s+Limited)?)/gi;
-  const atMatches = Array.from(workExpText.matchAll(atCompanyPattern));
-  
-  for (const match of atMatches) {
-    const company = match[1]?.trim();
-    if (company && company.length > 3 && company.length < 50) {
-      // Filter out false positives
-      if (!company.includes('Founder') && !company.includes('CEO') && !company.includes('CTO')) {
-        companies.add(company);
-      }
-    }
-  }
-
-  // Check for known companies
-  for (const company of knownCompanies) {
-    if (lowerText.includes(company.toLowerCase())) {
+    if (company && company.length > 3 && company.length < 50 && !/Founder|CEO|CTO|Manager|Engineer|Director|Consultant|Advisor|Resident|Intern/i.test(company)) {
       companies.add(company);
     }
   }
-
-  return Array.from(companies).slice(0, 10); // Limit to top 10
+  // Pattern: "at <Company>"
+  const atCompanyPattern = /at\s+([A-Z][A-Za-z0-9&.,'\s-]{3,40}(Inc|LLC|Ltd|Corp|Corporation|Technologies|Tech|Software|Systems|Pvt\s*Ltd|Private\s*Limited)?)/gi;
+  const atMatches = Array.from(text.matchAll(atCompanyPattern));
+  for (const match of atMatches) {
+    const company = match[1]?.trim();
+    if (company && company.length > 3 && company.length < 50) {
+      companies.add(company);
+    }
+  }
+  return Array.from(companies).slice(0, 5); // Limit to top 5
 }
 
 /**
@@ -144,7 +75,7 @@ function extractPastCompanies(text: string): string[] {
 function extractRoles(text: string): string[] {
   const roles: Set<string> = new Set();
 
-  // Role patterns with seniority
+  // Role patterns with seniority and flexible separators
   const rolePatterns = [
     // Senior roles
     /(?:senior|sr\.?|lead|principal|staff|distinguished)\s+([a-z\s]+?)(?:\s+engineer|\s+developer|\s+manager|\s+director|\s+architect)/gi,
@@ -152,22 +83,31 @@ function extractRoles(text: string): string[] {
     /(?:software|senior|junior|associate|mid-level)?\s*(engineer|developer|programmer|architect|manager|director|vp|vice\s+president|ceo|cto|cfo|coo|founder|co-founder|product\s+manager|project\s+manager|designer|analyst|consultant|specialist)/gi,
     // Executive roles
     /(ceo|cto|cfo|coo|founder|co-founder|president|vice\s+president|vp)/gi,
+    // Flexible: Role before company with dash or en dash
+    /([A-Za-z\s&]+)\s*[–-]\s*[A-Za-z][A-Za-z0-9&\s-]{3,40}(?:Inc|LLC|Ltd|Corp|Corporation|Technologies|Tech|Software|Systems|Pvt\s*Ltd|Private\s*Limited)?/gi,
   ];
 
+  const knownRoles = [
+    'Founder', 'CEO', 'CTO', 'COO', 'CFO', 'VP', 'Vice President', 'Director', 'Manager', 'Engineer', 'Product Manager', 'Project Manager', 'Architect', 'Analyst', 'Consultant', 'Specialist', 'Lead', 'President', 'Developer', 'Designer', 'Head'
+  ];
   for (const pattern of rolePatterns) {
     const matches = text.matchAll(pattern);
     for (const match of matches) {
-      const role = match[0]?.trim();
+      // For flexible pattern, match[1] is the role
+      let role = match[1] ? match[1].trim() : match[0]?.trim();
       if (role && role.length > 2) {
         // Normalize role names
-        const normalized = role
+        let normalized = role
           .replace(/\s+/g, ' ')
           .replace(/\bvp\b/gi, 'VP')
           .replace(/\bceo\b/gi, 'CEO')
           .replace(/\bcto\b/gi, 'CTO')
           .replace(/\bcfo\b/gi, 'CFO')
           .replace(/\bcoo\b/gi, 'COO');
-        roles.add(normalized);
+        // Only add if in knownRoles or matches a known role pattern
+        if (knownRoles.some(kr => normalized.toLowerCase().includes(kr.toLowerCase()))) {
+          roles.add(normalized);
+        }
       }
     }
   }
@@ -179,115 +119,30 @@ function extractRoles(text: string): string[] {
  * Extracts education information from resume text.
  */
 function extractEducation(text: string): string[] {
-  const education: Set<string> = new Set();
-  const lowerText = text.toLowerCase();
-
-  // Well-known universities (including Indian)
-  const knownUniversities = [
-    'MIT', 'Stanford', 'Harvard', 'Berkeley', 'Caltech', 'CMU', 'Carnegie Mellon',
-    'Princeton', 'Yale', 'Columbia', 'Cornell', 'UPenn', 'Dartmouth', 'Brown',
-    'UCLA', 'UC Berkeley', 'UC San Diego', 'Georgia Tech', 'UT Austin',
-    'IIT', 'Indian Institute of Technology', 'IIT Bombay', 'IIT Delhi', 'IIT Madras',
-    'IIT Kanpur', 'IIT Kharagpur', 'IIT Roorkee', 'IIT Guwahati', 'IIT Hyderabad',
-    'IIM', 'Indian Institute of Management', 'BITS', 'NIT',
-  ];
-
   // Find EDUCATION section
   const eduSection = text.match(/(?:EDUCATION|ACADEMIC|QUALIFICATIONS)[\s\S]*?(?=WORK|EXPERIENCE|SKILLS|PROJECTS|$)/i);
   const eduText = eduSection ? eduSection[0] : text;
-
-  // Better degree patterns with word boundaries to avoid partial matches
-  // Pattern 1: Full degree names (e.g., "Bachelor of Technology (B.Tech)")
-  const fullDegreePattern = /\b(Bachelor|Master|PhD|Doctorate|MBA|MS|BS|BA|MA|B\.?Tech|M\.?Tech|B\.?E|M\.?E|B\.?Sc|M\.?Sc)\b(?:\s+(?:of|in)\s+)?([A-Z][A-Za-z\s&]+?)(?:\s*\([^)]+\))?(?:\s+from|\s+at|\s*,\s*|\s*$)/gi;
-  const fullDegreeMatches = Array.from(eduText.matchAll(fullDegreePattern));
-  
-  for (const match of fullDegreeMatches) {
-    const degree = match[0]?.trim();
-    if (degree && degree.length > 5) {
-      // Filter out partial matches like "ms at", "ms fo", "ms in"
-      const testDegree = degree.toLowerCase();
-      if (!/^(ms|bs|ba|ma)\s+(at|fo|in|on|to|of|the|a|an|ed)$/i.test(testDegree) && 
-          !testDegree.match(/^(ms|bs|ba|ma)\s+(at|fo|in|on|to|of|the|a|an|ed)\s/i)) {
-        education.add(degree);
-      }
-    }
+  // Pattern: Degree, Field, University, Year
+  const pattern = /(Bachelor|Master|PhD|Doctorate|MBA|MS|BS|BA|MA|B\.?Tech|M\.?Tech|B\.?E|M\.?E|B\.?Sc|M\.?Sc)[^\n,]*?(?:in|of)?\s*([A-Za-z &]+)?[^\n,]*?(?:from|at)?\s*([A-Za-z0-9 .,&-]+)?[^\n,]*?(\d{4})?/gi;
+  const results: string[] = [];
+  let match;
+  while ((match = pattern.exec(eduText)) !== null) {
+    let str = match[1] || '';
+    if (match[2]) str += ` in ${match[2].trim()}`;
+    if (match[3]) str += ` from ${match[3].trim()}`;
+    if (match[4]) str += ` (${match[4]})`;
+    if (str.length > 8) results.push(str);
   }
-
-  // Pattern 2: Multi-line degree with university (e.g., "Bachelor of Technology (B.Tech)\nComputer Science\nIndian Institute of Technology (IIT), Bombay")
-  const lines = eduText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  for (let i = 0; i < lines.length - 1; i++) {
-    const line1 = lines[i];
-    const line2 = lines[i + 1];
-    const line3 = lines[i + 2];
-    
-    // Check if line1 is a degree, line2 is field, line3 is university
-    const degreeMatch = line1.match(/\b(Bachelor|Master|PhD|Doctorate|MBA|MS|BS|BA|MA|B\.?Tech|M\.?Tech|B\.?E|M\.?E|B\.?Sc|M\.?Sc)\b(?:\s+(?:of|in)\s+)?([A-Z][A-Za-z\s&]+?)?/i);
-    if (degreeMatch && line2 && line3) {
-      const degree = degreeMatch[0];
-      const field = line2.match(/^[A-Z][A-Za-z\s&]+$/) ? line2 : '';
-      const universityMatch = line3.match(/([A-Z][A-Za-z\s&(),-]+(?:University|College|Institute|School|Tech|IIT|IIM|BITS|NIT|Bombay|Delhi|Madras|Kanpur|Kharagpur|Roorkee|Guwahati|Hyderabad))/);
-      
-      if (universityMatch) {
-        const university = universityMatch[1];
-        const fullEdu = field ? `${degree} ${field} from ${university}` : `${degree} from ${university}`;
-        if (fullEdu.length > 10) {
-          education.add(fullEdu);
-        }
-      }
-    }
-  }
-
-  // Pattern 3: Degree with university on same line or next line
-  const degreeUniPattern = /\b(Bachelor|Master|PhD|Doctorate|MBA|MS|BS|BA|MA|B\.?Tech|M\.?Tech|B\.?E|M\.?E|B\.?Sc|M\.?Sc)\b(?:\s+(?:of|in)\s+)?([A-Z][A-Za-z\s&]+?)\s*(?:\n|,|\s+from|\s+at)\s*([A-Z][A-Za-z\s&(),-]+(?:University|College|Institute|School|Tech|IIT|IIM|BITS|NIT|Bombay|Delhi|Madras|Kanpur|Kharagpur|Roorkee|Guwahati|Hyderabad))/gi;
-  const degreeUniMatches = Array.from(eduText.matchAll(degreeUniPattern));
-  
-  for (const match of degreeUniMatches) {
-    const degree = match[1]?.trim();
-    const field = match[2]?.trim();
-    const university = match[3]?.trim();
-    if (degree && university) {
-      // Filter out partial matches
-      if (!/^(ms|bs|ba|ma)\s+(at|fo|in|on|to|of|the|a|an|ed)$/i.test(degree.toLowerCase())) {
-        const fullEdu = field && field.length > 2 ? `${degree} ${field} from ${university}` : `${degree} from ${university}`;
-        if (fullEdu.length > 10) {
-          education.add(fullEdu);
-        }
-      }
-    }
-  }
-
-  // Pattern 3: University names with context
-  for (const university of knownUniversities) {
-    if (lowerText.includes(university.toLowerCase())) {
-      const universityIndex = lowerText.indexOf(university.toLowerCase());
-      const context = text.slice(Math.max(0, universityIndex - 150), Math.min(text.length, universityIndex + 150));
-      
-      // Try to find degree associated with university
-      const degreeMatch = context.match(/\b(Bachelor|Master|PhD|Doctorate|MBA|MS|BS|BA|MA|B\.?Tech|M\.?Tech|B\.?E|M\.?E|B\.?Sc|M\.?Sc)\b(?:\s+(?:of|in)\s+)?([A-Z][A-Za-z\s&]+?)?/i);
-      if (degreeMatch) {
-        const degree = degreeMatch[1];
-        const field = degreeMatch[2] || '';
-        const fullEdu = field ? `${degree} ${field} from ${university}` : `${degree} from ${university}`;
-        if (fullEdu.length > 10) {
-          education.add(fullEdu);
-        }
-      } else {
-        education.add(university);
-      }
-    }
-  }
-
-  return Array.from(education).slice(0, 5); // Limit to top 5
+  if (results.length === 0) return ["Not disclosed in pitch deck or resume"];
+  return results.slice(0, 3);
 }
 
 /**
  * Detects domain keywords related to startup sectors.
  */
-function extractDomainAlignment(text: string): string[] {
+function extractDomainAlignment(text: string, sectorHint?: string): string[] {
   const domains: Set<string> = new Set();
   const lowerText = text.toLowerCase();
-
-  // Domain keyword mappings
   const domainKeywords: Record<string, string[]> = {
     'SaaS': ['saas', 'software as a service', 'cloud software', 'subscription', 'recurring revenue'],
     'AI/ML': ['artificial intelligence', 'machine learning', 'deep learning', 'neural network', 'ai', 'ml', 'llm', 'gpt'],
@@ -297,7 +152,6 @@ function extractDomainAlignment(text: string): string[] {
     'E-commerce': ['e-commerce', 'ecommerce', 'marketplace', 'retail', 'shopping'],
     'Climate': ['climate', 'sustainability', 'green tech', 'renewable energy', 'carbon'],
   };
-
   for (const [domain, keywords] of Object.entries(domainKeywords)) {
     for (const keyword of keywords) {
       if (lowerText.includes(keyword)) {
@@ -306,7 +160,10 @@ function extractDomainAlignment(text: string): string[] {
       }
     }
   }
-
+  // If nothing found, fallback to sector hint
+  if (domains.size === 0 && sectorHint && domainKeywords[sectorHint]) {
+    domains.add(sectorHint);
+  }
   return Array.from(domains);
 }
 
@@ -542,11 +399,13 @@ function calculateFounderStrengthScore(signals: FounderSignals, redFlags: string
 /**
  * Main function to extract all signals from resume text.
  */
-export function extractResumeSignals(
+
+export async function extractResumeSignals(
   resumeText: string,
   startupId: string,
-  role: string = 'Founder'
-): FounderVerificationResult {
+  role: string = 'Founder',
+  sectorHint?: string
+): Promise<FounderVerificationResult & { name?: string }> {
   if (!resumeText || resumeText.trim().length === 0) {
     return {
       startupId,
@@ -560,6 +419,7 @@ export function extractResumeSignals(
         domainAlignment: [],
       },
       redFlags: ['Empty or invalid resume'],
+      name: 'Unknown',
     };
   }
 
@@ -568,8 +428,44 @@ export function extractResumeSignals(
     pastCompanies: extractPastCompanies(resumeText),
     roles: extractRoles(resumeText),
     education: extractEducation(resumeText),
-    domainAlignment: extractDomainAlignment(resumeText),
+    domainAlignment: extractDomainAlignment(resumeText, sectorHint),
   };
+  // Debug log for extracted signals
+  console.log('[Resume Extraction] Extracted signals:', JSON.stringify(signals, null, 2));
+
+
+  // Try to extract founder name from resume text (simple heuristic: first line with 'Founder' or 'CEO')
+  let name = '';
+  const lines = resumeText.split(/\r?\n/);
+  for (const line of lines) {
+    if (/founder|ceo|co-founder|managing director|director/i.test(line) && line.match(/[A-Z][a-z]+/g)) {
+      // Try to extract name (first two capitalized words)
+      const match = line.match(/([A-Z][a-z]+\s+[A-Z][a-z]+)/);
+      if (match) {
+        name = match[1];
+        break;
+      }
+    }
+  }
+  if (!name || /resume|unknown/i.test(name)) {
+    // Fallback: try to extract from pitch deck team section if available
+    try {
+      // Dynamically import teamExtractor to avoid circular deps
+      const { extractTeamInfo } = await import('./teamExtractor.js');
+      // Assume global.pitchDeckText is set by the main pipeline before calling this function
+      const pitchDeckText = (global as any).pitchDeckText as string | undefined;
+      if (pitchDeckText && pitchDeckText.length > 0) {
+        const teamInfo = extractTeamInfo(pitchDeckText);
+        const founder = teamInfo.members.find(m => /founder|ceo|cmo|chief/i.test(m.role));
+        if (founder && founder.name) {
+          name = founder.name;
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+  if (!name) name = 'Not disclosed in pitch deck or resume';
 
   // Detect red flags (pass signals for enhanced detection)
   const redFlags = detectRedFlags(resumeText, signals);
@@ -581,6 +477,7 @@ export function extractResumeSignals(
     founderStrengthScore: Math.round(founderStrengthScore * 10) / 10, // Round to 1 decimal
     signals,
     redFlags,
+    name,
   };
 }
 

@@ -1,8 +1,8 @@
 import { chunkText } from "../utils/textChunker.js";
 import { normalizeToPlainText } from "../utils/normalizeText.js";
-import vectorStore from "./vectorStore.js";
 import { generateEmbedding } from "./embeddingService.js";
 import { EmbeddingVector, ProcessedFile } from "../types/index.js";
+import { LocalVectorStore } from "../vectorstore/LocalVectorStore.js";
 
 const MAX_TEXT_LENGTH = 50000;
 
@@ -80,10 +80,11 @@ export async function processAndStoreDocuments(
       }
     }
 
-    // Batch upsert all vectors
+    // Batch upsert all vectors using FAISS
     if (allVectors.length > 0) {
-      await vectorStore.upsert(allVectors);
-      console.log(`Successfully stored ${allVectors.length} vectors for startup ${startupId}`);
+      const localVectorStore = new LocalVectorStore();
+      await localVectorStore.upsert(allVectors);
+      console.log(`Successfully stored ${allVectors.length} vectors for startup ${startupId} (LocalVectorStore)`);
     } else {
       console.warn(`No vectors to store for startup ${startupId}`);
     }
