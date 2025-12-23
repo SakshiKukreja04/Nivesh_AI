@@ -195,12 +195,10 @@
   "healium": {
     "startupId": "healium",
     "role": "Founder",
-    "founderStrengthScore": 9.5,
+    "founderStrengthScore": 7,
     "signals": {
-      "experienceYears": 30,
-      "pastCompanies": [
-        "X"
-      ],
+      "experienceYears": 0,
+      "pastCompanies": [],
       "roles": [
         "Founder",
         "Director",
@@ -209,7 +207,9 @@
         "Founder & Managing Director"
       ],
       "education": [
-        "NIT"
+        "Master in of Pharmacy",
+        "ma in ceutical Sciences",
+        "Ma in naging Director"
       ],
       "domainAlignment": [
         "AI/ML",
@@ -249,13 +249,11 @@
   "meditrack": {
     "startupId": "meditrack",
     "role": "Founder",
-    "founderStrengthScore": 8,
+    "founderStrengthScore": 7,
     "signals": {
-      "experienceYears": 7,
+      "experienceYears": 0,
       "pastCompanies": [
-        "MediTrack HealthTech",
-        "a multi",
-        "X"
+        "a multi"
       ],
       "roles": [
         "Founder",
@@ -266,7 +264,9 @@
         "Senior Consultant"
       ],
       "education": [
-        "Not disclosed in pitch deck or resume"
+        "ms from , and chronic care protocols. Past Organizations -- 1 of 2 --",
+        "Me in diTrack HealthTech Pvt from . Ltd.",
+        "Me in dical College & Sir J from .J. Group of Hospitals, Mumbai"
       ],
       "domainAlignment": [
         "AI/ML",
@@ -336,5 +336,92 @@
     },
     "redFlags": [],
     "name": "Ananya Mehta"
+  },
+  "cloudflow-saas-pvt.-ltd": {
+    "startupId": "cloudflow-saas-pvt.-ltd",
+    "role": "Founder",
+    "founderStrengthScore": 7,
+    "signals": {
+      "experienceYears": 0,
+      "pastCompanies": [],
+      "roles": [
+        "Founder",
+        "CEO",
+        "engineer",
+        "Product Manager",
+        "Founder Resume",
+        "Founder & CEO"
+      ],
+      "education": [
+        "Ma in nagement",
+        "me in dabad",
+        "ma in Alignment"
+      ],
+      "domainAlignment": [
+        "SaaS",
+        "AI/ML"
+      ]
+    },
+    "redFlags": [],
+    "name": "Founder Resume"
+  },
+  "nexaflow": {
+    "startupId": "nexaflow",
+    "role": "Founder",
+    "founderStrengthScore": 7,
+    "signals": {
+      "experienceYears": 0,
+      "pastCompanies": [],
+      "roles": [
+        "Founder",
+        "CEO",
+        "engineer",
+        "architect",
+        "Engineer",
+        "GitHub Professional Summary Founder and CEO of an AI",
+        "and leading cross",
+        "Startup Pitching Professional Experience Founder & CEO",
+        "PostgreSQL Education Bachelor of Engineering"
+      ],
+      "education": [
+        "Bachelor in of Engineering",
+        "mba in i Certifications AWS Cloud Fundamentals from , Data Analytics & Business Intelligence, Python for Data Engineering -- 1 of 1 --"
+      ],
+      "domainAlignment": [
+        "SaaS",
+        "AI/ML"
+      ]
+    },
+    "redFlags": [],
+    "name": "Analytics Mumbai"
+  },
+  "healthium": {
+    "startupId": "healthium",
+    "role": "Founder",
+    "founderStrengthScore": 6,
+    "signals": {
+      "experienceYears": 0,
+      "pastCompanies": [
+        "scale. Contributed to backend system desi"
+      ],
+      "roles": [
+        "architect",
+        "engineer",
+        "Engineer",
+        "CTO",
+        "Professional Summary Technology leader with over eight years of experience building scalable cloud"
+      ],
+      "education": [
+        "Master in of Science in Computer Science Massachusetts Institute of Technology",
+        "Bachelor in of Science in Computer Engineering University of Delhi from , 2012 Professional"
+      ],
+      "domainAlignment": [
+        "SaaS",
+        "AI/ML",
+        "Healthtech"
+      ]
+    },
+    "redFlags": [],
+    "name": "Not disclosed in pitch deck or resume"
   }
 }

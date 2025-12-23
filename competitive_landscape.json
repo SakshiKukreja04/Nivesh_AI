@@ -1,0 +1,98 @@
+{
+  "saas": [
+    {
+      "name": "Salesforce (Sales Cloud)",
+      "region": "Global (US-headquartered)",
+      "pricing_summary": "Starts around $25 USD per user/month for entry Sales Cloud editions; enterprise pricing and add-ons vary and often require sales contact.",
+      "differentiator": "Extensive enterprise CRM ecosystem and deep integrations with broad ISV marketplace."
+    },
+    {
+      "name": "HubSpot",
+      "region": "Global (US & EU strong footprint)",
+      "pricing_summary": "Free CRM tier available; paid Starter/Professional/Enterprise tiers (examples: Starter ~ $20/user/month; promotional first-year discounts sometimes apply).",
+      "differentiator": "All-in-one inbound marketing + CRM platform with strong free tier and marketing automation for SMBs."
+    },
+    {
+      "name": "Zendesk",
+      "region": "Global (strong US / EMEA presence)",
+      "pricing_summary": "Agent-based pricing starting from roughly $19–25 USD/agent/month for basic support plans (annual billing); advanced AI and WFM add-ons priced separately.",
+      "differentiator": "Omnichannel customer support platform with rich ticketing, AI automation and large ecosystem of integrations."
+    },
+    {
+      "name": "Atlassian (Jira / Confluence)",
+      "region": "Global (Australia/US operations)",
+      "pricing_summary": "Free tier for small teams; Standard ~$7.91 per user/month and Premium ~$14.54 per user/month (cloud pricing; varies by region and billing frequency).",
+      "differentiator": "Developer- and team-centric collaboration tools with strong workflow/customization for engineering teams."
+    },
+    {
+      "name": "Freshworks (Freshdesk / Freshsales)",
+      "region": "Global (strong India / US presence)",
+      "pricing_summary": "Free programs available for small teams; paid plans from roughly $15 per agent/month for helpdesk tiers; product-specific pricing and bundled offers exist.",
+      "differentiator": "Easy-to-use customer service suites optimized for fast time-to-value and competitive SMB pricing."
+    }
+  ],
+  "healthcare": [
+    {
+      "name": "Teladoc Health",
+      "region": "Primarily US, global operations",
+      "pricing_summary": "Per-visit self-pay options (example: ~USD $89 per visit) and many customers access via employer/insurer plans; subscription & program pricing varies by region and payer.",
+      "differentiator": "Large telehealth network with broad services (primary care, mental health, specialist consults) and payer integrations."
+    },
+    {
+      "name": "Babylon Health",
+      "region": "UK, Europe, parts of Asia / Africa",
+      "pricing_summary": "Subscription-based consumer plans (examples: monthly/annual bundles in the UK — tiered plans such as Lite/Monthly/Annual); pricing varies by market and plan.",
+      "differentiator": "AI-driven triage and virtual GP services paired with subscription packages for consumers and partners."
+    },
+    {
+      "name": "Practo",
+      "region": "India (primary), expanding in APAC",
+      "pricing_summary": "Consumer subscription (Practo Plus) and provider (clinic/EMR) plans: consumer plans start around INR 1,199/month (discounted annual options available); clinic management tiers are priced separately.",
+      "differentiator": "India-focused healthcare platform combining patient bookings, teleconsults, records and clinic management in one ecosystem."
+    },
+    {
+      "name": "Oracle Health (Cerner)",
+      "region": "Primarily US; global enterprise customers",
+      "pricing_summary": "Enterprise EHR/health IT pricing is custom and typically large-capex/contract-based (published guidance and certified-cost disclosures available; per-user or site licensing models used).",
+      "differentiator": "Large hospital / enterprise-grade EHR with deep clinical workflows and long-established market share (now part of Oracle)."
+    },
+    {
+      "name": "Philips Healthcare",
+      "region": "Global (strong EU / US presence)",
+      "pricing_summary": "Medical device and software offerings use capital purchase, service contracts, or subscription (e.g., Enterprise Monitoring-as-a-Service) — pricing is contract/solution-specific.",
+      "differentiator": "Broad portfolio across imaging, monitoring and enterprise informatics with strong hardware+software integration."
+    }
+  ],
+  "fintech": [
+    {
+      "name": "Stripe",
+      "region": "Global (strong US / EU / APAC coverage)",
+      "pricing_summary": "Card processing: typical published rates e.g., domestic cards ~2.7–2.9% + fixed cent-per-transaction depending on country; Connect/Advanced products have additional usage-based fees.",
+      "differentiator": "Developer-first payments API with modular products for marketplaces, subscriptions, and global payouts."
+    },
+    {
+      "name": "Square (Block)",
+      "region": "Primarily US, Canada, UK, Australia, Japan",
+      "pricing_summary": "Consumer-facing pricing: example in-person card rates ~2.6% + $0.10–$0.15; online rates higher and monthly software tiers (Square Plus etc.) exist (regional variations apply).",
+      "differentiator": "Integrated POS hardware + payments + merchant software stack for small businesses and retailers."
+    },
+    {
+      "name": "PayPal",
+      "region": "Global (strong US / EU / India presence)",
+      "pricing_summary": "Transaction fees vary by country and payment type (merchant fees, currency conversion fees). For many markets consumer purchases are free; merchant fees are percent + fixed-amount per transaction and differ regionally.",
+      "differentiator": "Ubiquitous consumer wallet and checkout experience with strong buyer protections and broad merchant acceptance."
+    },
+    {
+      "name": "Revolut",
+      "region": "UK / Europe initially; expanding globally",
+      "pricing_summary": "Tiered consumer plans: Standard (free), Plus (~£3.99/mo), Premium (~£7.99/mo), Metal/Ultra paid tiers with additional benefits; business plans available with monthly fees and FX/transaction limits.",
+      "differentiator": "Neobank-style app combining multi-currency accounts, FX, cards and additional fintech services in a single app."
+    },
+    {
+      "name": "Plaid",
+      "region": "US-first, expanding globally",
+      "pricing_summary": "Developer-focused pricing: pay-as-you-go or subscription models for different products (per-request flat fees, monthly subscriptions or enterprise contracts depending on product & volume).",
+      "differentiator": "Bank connectivity and data APIs used widely by fintechs to access account & transaction data securely."
+    }
+  ]
+}

@@ -24,5 +24,29 @@
       "cons": []
     },
     "rawEvidence": []
+  },
+  "healium": {
+    "sector": "unknown",
+    "productSummary": "",
+    "polishedSummary": "",
+    "keyMetrics": {},
+    "defensibility": {
+      "pros": [],
+      "cons": []
+    },
+    "rawEvidence": []
+  },
+  "cloudflow-saas-pvt.-ltd": {
+    "sector": "saas",
+    "productSummary": "",
+    "polishedSummary": "",
+    "keyMetrics": {
+      "users": "."
+    },
+    "defensibility": {
+      "pros": [],
+      "cons": []
+    },
+    "rawEvidence": []
   }
 }

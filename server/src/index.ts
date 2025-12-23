@@ -1,14 +1,14 @@
-
-import dotenv from "dotenv";
-dotenv.config();
+// ...existing code...
+// Place this AFTER 'const app = express();' and all imports, before route definitions
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import multer from "multer";
 import fs from "fs";
 import { promises as fsPromises } from "fs";
 import path from "path";
-import { processUploadedFile, detectFileType } from "./utils/fileUtils.js";
+import { processUploadedFile } from "./utils/fileUtils.js";
 import { processAndStoreDocuments } from "./services/documentProcessor.js";
+import { uploadToS3, getObjectBuffer, getSignedUrlForKey } from "./lib/s3Client.js";
 import { analyzeWithRAG } from "./services/groqAnalyzer.js";
 import ragRouter from "./routes/ragQuery.route.js";
 import productTechRouter from './routes/productTech.route.js';
@@ -36,7 +36,7 @@ function saveProductTech(startupId: string, signals: any) {
     fs.writeFileSync(PRODUCT_TECH_FILE, JSON.stringify(all, null, 2));
 }
 
-import { ProcessedFile, StartupMetadata, FounderVerificationResult, TeamInfo } from "./types/index.js";
+import { ProcessedFile, StartupMetadata, FounderVerificationResult, TeamInfo, ProductTechSignals } from "./types/index.js";
 import { extractClaims } from "./services/claimExtractor.js";
 
 import { validateMarketOpportunity, MarketOpportunityInput, MarketOpportunityValidationResult } from "./services/marketOpportunityValidator.js";
@@ -186,7 +186,6 @@ async function saveTeamInfo(startupId: string, teamInfo: TeamInfo): Promise<void
 }
 
 ensureDataDir();
-dotenv.config();
 import { analyzeTeamRoleImportanceLLM } from "./services/groqAnalyzer.js";
 // (removed duplicate import fs from "fs")
 app.use(cors());
@@ -228,46 +227,86 @@ app.post("/api/analyze",
         console.log(`[ANALYZE] Metadata:`, JSON.stringify(req.body, null, 2));
         
         try {
-            const metadata = req.body as StartupMetadata;
-            const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
-
-            console.log(`[ANALYZE] Files received:`, files ? Object.keys(files).join(', ') : 'none');
-
-            if (!files || Object.keys(files).length === 0) {
-                console.log(`[ANALYZE] ERROR: No files uploaded`);
-                return res.status(400).json({ success: false, error: "No files uploaded" });
-            }
-
-            // Process uploaded files (excluding CV) - preserve order to match with file keys
-            const fileEntries = Object.entries(files).filter(([key]) => key !== "cv");
-            const processedFilesWithKeys: Array<ProcessedFile & { fileKey: string }> = await Promise.all(
-                fileEntries.map(async ([key, fileArray]) => {
-                    const file = fileArray[0];
-                    const fileType = file ? detectFileType(file) : "unknown";
-                    if (!file) {
-                        return { text: "", savedFile: null, fileType, fileKey: key };
+                const metadata = req.body as StartupMetadata;
+                const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+                const startupId = metadata.startupName?.toLowerCase().replace(/\s+/g, "-") || `startup-${Date.now()}`;
+                const s3Files: any = {};
+                const s3UploadErrors: any[] = [];
+                // S3 key convention
+                const s3Key = (type: string, originalName: string) => {
+                        const ts = Date.now();
+                        return `uploads/${startupId}/${type}/${ts}-${originalName}`;
+                };
+                // Upload each file to S3
+                if (files) {
+                        for (const [field, arr] of Object.entries(files)) {
+                                if (!arr || arr.length === 0) continue;
+                                const file = arr[0];
+                                const key = s3Key(
+                                        field === "cv" ? "founder-cv" :
+                                        field === "pitchDeck" ? "pitch-deck" :
+                                        field === "transcript" ? "transcripts" :
+                                        field === "email" ? "emails" : field,
+                                        file.originalname
+                                );
+                                try {
+                                        await uploadToS3(file.buffer, key, file.mimetype);
+                                        if (field === "cv") s3Files.founderCV = { s3Key: key, originalName: file.originalname };
+                                        else if (field === "pitchDeck") s3Files.pitchDeck = { s3Key: key, originalName: file.originalname };
+                                        else if (field === "transcript") {
+                                                if (!s3Files.transcripts) s3Files.transcripts = [];
+                                                s3Files.transcripts.push({ s3Key: key, originalName: file.originalname });
+                                        } else if (field === "email") {
+                                                if (!s3Files.emails) s3Files.emails = [];
+                                                s3Files.emails.push({ s3Key: key, originalName: file.originalname });
+                                        }
+                                } catch (err) {
+                                        s3UploadErrors.push({ field, error: err });
+                                        // Fallback: skip for now, could write to local temp if needed
+                                        console.error(`[S3-UPLOAD] Failed for ${field}:`, err);
+                                }
+                        }
+                }
+                // Build metadata.json
+                // (metadataJson is not used directly, so we don't need to keep it as a variable)
+                // Fetch files from S3 as Buffer for downstream processing
+                const processedFiles: ProcessedFile[] = [];
+                const fileKeyMap = new Map<number, string>();
+                const s3FileTypes = [
+                    { field: 'pitchDeck', type: 'pdf' },
+                    { field: 'cv', type: 'pdf' },
+                    { field: 'transcript', type: 'txt' },
+                    { field: 'email', type: 'txt' }
+                ];
+                for (const { field, type } of s3FileTypes) {
+                    const fileMeta = s3Files[field] || (Array.isArray(s3Files[field + 's']) ? s3Files[field + 's'][0] : undefined);
+                    if (fileMeta && fileMeta.s3Key) {
+                        try {
+                            const buffer = await getObjectBuffer(fileMeta.s3Key);
+                            // Use processUploadedFile to extract text, etc.
+                            const processed = await processUploadedFile({
+                                buffer,
+                                originalname: fileMeta.originalName,
+                                mimetype: type === 'pdf' ? 'application/pdf' : 'text/plain',
+                                size: buffer.length,
+                                fieldname: field
+                            } as Express.Multer.File, type as any);
+                            processedFiles.push(processed);
+                            fileKeyMap.set(processedFiles.length - 1, field);
+                        } catch (err) {
+                            console.error(`[S3-FETCH] Failed to fetch/process ${field} from S3:`, err);
+                        }
                     }
-                    const processed = await processUploadedFile(file, fileType);
-                    return { ...processed, fileKey: key };
-                })
-            );
-            
-            // Separate files for processing (without fileKey) and keep mapping for team extraction
-            const processedFiles: ProcessedFile[] = processedFilesWithKeys.map(({ fileKey, ...file }) => file);
-            const fileKeyMap = new Map<number, string>(processedFilesWithKeys.map((pf, idx) => [idx, pf.fileKey]));
-
-            // Calculate startupId once (used for both CV and main analysis)
-            const startupId = metadata.startupName?.toLowerCase().replace(/\s+/g, "-") || `startup-${Date.now()}`;
-            console.log(`[ANALYZE] Startup ID: ${startupId}`);
-
+                }
                         // === Product/Tech Extraction and Save ===
                         // Try to extract product/tech signals from pitch deck text (if available)
                         let productTechSignals = null;
                         const pitchDeckText = processedFiles.find(f => f.fileType === 'pdf' || f.fileType === 'pptx')?.text || '';
                         if (pitchDeckText && pitchDeckText.length > 30) {
-                            // Naive section splitter: split by lines with ALL CAPS or numbers (simulate sections)
+                            // Improved section splitter: split by lines with ALL CAPS, numbers, or common section headers
+                            const sectionSplitter = /\n(?=(?:[A-Z0-9 .\-]{5,}|PRODUCT|TECH|TEAM|MARKET|SOLUTION|FEATURES|ABOUT|SUMMARY|OVERVIEW|PROBLEM|OPPORTUNITY|BUSINESS|MODEL|VISION|MISSION|GO TO MARKET|GTM|CUSTOMER|CLIENT|REVENUE|FINANCIAL|TRACTION|GROWTH|ROADMAP|COMPETITION|BENCHMARK|BENCHMARKS|BENEFITS|VALUE|PROPOSITION|USE CASE|APPLICATIONS|IMPLEMENTATION|DEPLOYMENT|ARCHITECTURE|PLATFORM|INNOVATION|PIPELINE|MVP|PROTOTYPE|IP|PATENT|DEFENSIBILITY|MOAT|DIFFERENTIATOR|ADVANTAGE|SCALABILITY|SECURITY|COMPLIANCE|REGULATORY|LEGAL|RISKS|CHALLENGES|TEAM|ADVISORS|LEADERSHIP|MANAGEMENT|FOUNDERS|PEOPLE|TALENT|CREW|SQUAD|MEMBERS|BIOS|BIOGRAPHIES|BACKGROUND|WHO WE ARE|MEET THE TEAM|KEY HIRES|KEY PEOPLE|KEY MEMBERS|KEY TALENT|KEY STAFF|KEY ADVISORS|KEY EXECUTIVES|KEY LEADERSHIP|KEY MANAGEMENT|KEY FOUNDERS|KEY FOUNDER|KEY EXECUTIVE|KEY LEADER|KEY MANAGER|KEY ADVISOR|KEY BIO|KEY BIOGRAPHY|KEY BACKGROUND|KEY PROFILE|KEY PROFILES|KEY BIO|KEY BIOGRAPHIES|KEY BACKGROUNDS|KEY WHO WE ARE|KEY MEET THE TEAM)\n)/i;
                             const sectionChunks = pitchDeckText
-                                .split(/\n(?=[A-Z0-9 .\-]{5,}\n)/)
+                                .split(sectionSplitter)
                                 .map((chunk, i) => ({ section: `Section ${i + 1}`, text: chunk.trim() }))
                                 .filter(c => c.text.length > 30);
                             if (sectionChunks.length > 0) {
@@ -289,7 +328,7 @@ app.post("/api/analyze",
 
             // Extract team information from pitch deck
             let teamInfo: TeamInfo | null = null;
-            const pitchDeckFile = files["pitchDeck"]?.[0];
+            const pitchDeckFile = files?.["pitchDeck"]?.[0];
             if (pitchDeckFile) {
                 console.log(`[ANALYZE] Pitch deck detected: ${pitchDeckFile.originalname} (${pitchDeckFile.size} bytes)`);
                 try {
@@ -302,7 +341,7 @@ app.post("/api/analyze",
                         }
                     }
 
-                    if (pitchDeckText && pitchDeckText.trim().length > 0) {
+                        if (typeof pitchDeckText === 'string' && pitchDeckText.trim().length > 0) {
                         console.log(`[ANALYZE] Extracting team info from pitch deck (${pitchDeckText.length} characters)...`);
                         teamInfo = extractTeamInfo(pitchDeckText);
                         if (teamInfo && teamInfo.members.length > 0) {
@@ -324,7 +363,7 @@ app.post("/api/analyze",
 
             // Process CV if provided, else try pitch deck for founder verification
             let founderVerification: FounderVerificationResult | null = null;
-            const cvFile = files["cv"]?.[0];
+            const cvFile = files?.["cv"]?.[0];
             if (cvFile) {
                 console.log(`[ANALYZE] CV file detected: ${cvFile.originalname} (${cvFile.size} bytes, ${cvFile.mimetype})`);
                 if (cvFile.mimetype === "application/pdf") {
@@ -353,7 +392,42 @@ app.post("/api/analyze",
             } else {
                 console.log(`[ANALYZE] No CV file provided. Attempting to extract founder verification from pitch deck text...`);
                 // Try to extract from pitch deck text if available
-                const pitchDeckText = processedFilesWithKeys.find(f => f.fileKey === "pitchDeck")?.text || "";
+                // No processedFilesWithKeys in S3 logic, fallback to empty string
+                let pitchDeckText: string = "";
+                // GET /api/startup/:id/snapshot - fetch metadata.json from S3 and return signed URLs
+                app.get('/api/startup/:startupId/snapshot', async (req: Request, res: Response) => {
+                    const { startupId } = req.params;
+                    const metaKey = `uploads/${startupId}/metadata.json`;
+                    try {
+                        // Fetch metadata.json from S3
+                        const metaBuffer = await getObjectBuffer(metaKey);
+                        const metadata = JSON.parse(metaBuffer.toString('utf-8'));
+                        const signedUrls: any = {};
+                        const fileAvailability: any = {};
+                        // Generate signed URLs for pitch deck and founder CV if present
+                        if (metadata.files?.pitchDeck?.s3Key) {
+                            signedUrls.pitchDeck = await getSignedUrlForKey(metadata.files.pitchDeck.s3Key, 3600);
+                            fileAvailability.pitchDeck = true;
+                        } else {
+                            fileAvailability.pitchDeck = false;
+                        }
+                        if (metadata.files?.founderCV?.s3Key) {
+                            signedUrls.founderCV = await getSignedUrlForKey(metadata.files.founderCV.s3Key, 3600);
+                            fileAvailability.founderCV = true;
+                        } else {
+                            fileAvailability.founderCV = false;
+                        }
+                        // Optionally add more files (emails, transcripts) as needed
+                        res.json({
+                            startup: metadata,
+                            fileAvailability,
+                            signedUrls
+                        });
+                    } catch (err) {
+                        console.error('[SNAPSHOT-API] Error fetching metadata or generating URLs:', err);
+                        res.status(404).json({ error: 'Snapshot not found or S3 error' });
+                    }
+                });
                 if (pitchDeckText && pitchDeckText.trim().length > 0) {
                     try {
                         const role = (req.body && (req.body as any).role as string) || "Founder";
@@ -427,19 +501,87 @@ app.post("/api/analyze",
             console.log(`[ANALYZE] RAG Analysis JSON:`, JSON.stringify(analysis, null, 2));
 
             const duration = Date.now() - startTime;
+            // --- Market Assessment Comparison ---
+            let marketStrength = 'unknown';
+            let marketComparison = null;
+            if (marketOpportunityResult && metadata && metadata.sector) {
+                try {
+                    const sectorBenchmarks = require('../data/sectorBenchmarksjson');
+                    const sector = metadata.sector;
+                    const country = (metadata.location || 'india').toLowerCase();
+                    const sectorData = sectorBenchmarks[sector] && sectorBenchmarks[sector][country];
+                    if (sectorData && marketOpportunityResult.validatedTAM) {
+                        const tam = marketOpportunityResult.validatedTAM;
+                        marketComparison = {
+                            startupTAM: tam,
+                            avgTAM: sectorData.avgTAM,
+                            minTAM: sectorData.minTAM,
+                            maxReasonableTAM: sectorData.maxReasonableTAM,
+                            growthRate: sectorData.growthRate
+                        };
+                        marketStrength = tam >= sectorData.avgTAM ? 'strong' : 'weak';
+                    }
+                } catch (err) {
+                    console.warn('[MARKET-ASSESSMENT] Could not compare to sector benchmarks:', err);
+                }
+            }
+
+            // --- Product & Technology Enhancement ---
+            let enhancedProductTech: ProductTechSignals | null = productTechSignals;
+            try {
+                if (productTechSignals && productTechSignals.productSummary) {
+                    const groqResult = await polishProductTechWithGroq(productTechSignals);
+                    enhancedProductTech = {
+                        ...productTechSignals,
+                        polishedSummary: groqResult.polishedSummary,
+                        defensibility: groqResult.defensibility,
+                        MVP: /mvp|minimum viable product|prototype/i.test(productTechSignals.productSummary) ? 'Built' : 'Not Built',
+                    };
+                }
+                // Compare metrics to sector benchmarks
+                if (metadata && metadata.sector && enhancedProductTech && enhancedProductTech.keyMetrics) {
+                    const sectorBenchmarks = require('../data/sectorBenchmarksjson');
+                    const sector = metadata.sector;
+                    const country = (metadata.location || 'india').toLowerCase();
+                    const sectorData = sectorBenchmarks[sector] && sectorBenchmarks[sector][country];
+                    if (sectorData) {
+                        if (!enhancedProductTech.metricsComparison) enhancedProductTech.metricsComparison = {};
+                        if (enhancedProductTech.keyMetrics.users) {
+                            enhancedProductTech.metricsComparison.usersVsAvg = Number(enhancedProductTech.keyMetrics.users) >= (sectorData.avgUsers || 0) ? 'above average' : 'below average';
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('[PRODUCT-TECH] Enhancement error:', err);
+            }
+
             const responseData = {
                 success: true,
                 analysis,
                 startupId,
-                founderVerification: founderVerification || undefined,
+                founderVerification: founderVerification ? { ...founderVerification, role: founderVerification.role } : undefined,
                 teamInfo: teamInfo || undefined,
                 claims: claims || [],
                 metadata: metadata || {},
                 summary: analysis?.summary || "",
                 marketOpportunity: marketOpportunityResult || undefined,
-                productTech: productTechSignals || undefined
+                marketComparison,
+                marketStrength,
+                productTech: enhancedProductTech || undefined
             };
-            
+
+            // --- S3 Storage for metadata and summary ---
+            const s3MetaFolder = `metadata/${startupId}/`;
+            await uploadToS3(Buffer.from(JSON.stringify(responseData, null, 2)), `${s3MetaFolder}metadata.json`, 'application/json');
+            if (analysis?.summary) {
+                await uploadToS3(Buffer.from(analysis.summary, 'utf-8'), `${s3MetaFolder}summary.txt`, 'text/plain');
+            }
+            // Store summary.txt (if available)
+            if (analysis?.summary) {
+                await uploadToS3(Buffer.from(analysis.summary, 'utf-8'), `${s3MetaFolder}summary.txt`, 'text/plain');
+            }
+            // --- End S3 Storage ---
+
             console.log(`[ANALYZE] Analysis completed in ${duration}ms`);
             console.log(`[ANALYZE] Final Response JSON:`, JSON.stringify(responseData, null, 2));
             console.log(`[ANALYZE] ========================================\n`);
@@ -454,6 +596,68 @@ app.post("/api/analyze",
         }
     }
 );
+
+// Endpoint to fetch analysis metadata and summary from S3 for dashboard rendering
+app.get('/api/startup/:startupId/metadata', async (req: Request, res: Response) => {
+    const { startupId } = req.params;
+    const s3MetaFolder = `metadata/${startupId}/`;
+    try {
+        // Fetch metadata.json
+        const metaBuffer = await getObjectBuffer(`${s3MetaFolder}metadata.json`);
+        const metadata = JSON.parse(metaBuffer.toString('utf-8'));
+        // Fetch summary.txt (optional)
+        let summary = '';
+        try {
+            const summaryBuffer = await getObjectBuffer(`${s3MetaFolder}summary.txt`);
+            summary = summaryBuffer.toString('utf-8');
+        } catch (e) {
+            summary = metadata.summary || '';
+        }
+        res.json({ ...metadata, summary });
+    } catch (err) {
+        console.error('[METADATA-API] Error fetching metadata or summary from S3:', err);
+        res.status(404).json({ error: 'Metadata not found or S3 error' });
+    }
+});
+
+// POST /api/competitive-landscape - upload competitive landscape JSON to S3
+app.post('/api/competitive-landscape', async (req: Request, res: Response) => {
+    try {
+        const payload = req.body;
+        if (!payload || typeof payload !== 'object') {
+            return res.status(400).json({ success: false, error: 'JSON body required' });
+        }
+        const key = `competitive_landscape/competitive_landscape.json`;
+        await uploadToS3(Buffer.from(JSON.stringify(payload, null, 2)), key, 'application/json');
+        return res.json({ success: true, key });
+    } catch (err) {
+        console.error('[COMP-LANDSCAPE-POST] Error uploading to S3:', err);
+        return res.status(500).json({ success: false, error: 'Failed to upload competitive landscape' });
+    }
+});
+
+// GET /api/competitive-landscape?sector= - fetch competitive landscape and filter by sector
+app.get('/api/competitive-landscape', async (req: Request, res: Response) => {
+    const sectorQuery = (req.query.sector as string) || '';
+    try {
+        const key = `competitive_landscape/competitive_landscape.json`;
+        const buf = await getObjectBuffer(key);
+        const json = JSON.parse(buf.toString('utf-8'));
+
+        if (!sectorQuery) {
+            return res.json({ success: true, data: json });
+        }
+
+        const norm = sectorQuery.trim().toLowerCase();
+        // support keys like 'saas', 'fintech', 'healthcare' (case-insensitive)
+        const sectorKey = Object.keys(json).find(k => k.toLowerCase() === norm) || null;
+        const entries = sectorKey ? json[sectorKey] : [];
+        return res.json({ success: true, sector: sectorKey, entries });
+    } catch (err) {
+        console.error('[COMP-LANDSCAPE-GET] Error fetching competitive landscape from S3:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch competitive landscape' });
+    }
+});
 
 // Get founder verification by startup ID
 app.get("/api/founder-verification/:startupId", async (req: Request, res: Response) => {

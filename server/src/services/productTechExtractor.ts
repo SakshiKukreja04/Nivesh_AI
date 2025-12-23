@@ -1,8 +1,9 @@
 import { ProductTechSignals } from '../types/index.js';
 
-// Section keywords for extraction
+// Section keywords for extraction (add more synonyms, case-insensitive)
 const SECTION_KEYWORDS = [
-  'product', 'solution', 'technology', 'platform', 'features', 'tech', 'architecture'
+  'product', 'solution', 'technology', 'platform', 'features', 'tech', 'architecture',
+  'innovation', 'system', 'stack', 'software', 'hardware', 'service', 'offering', 'capability', 'capabilities', 'tools', 'engine', 'infrastructure', 'api', 'mobile', 'web', 'app', 'application', 'applications', 'module', 'modules', 'integration', 'integrations', 'workflow', 'workflows', 'automation', 'ai', 'ml', 'machine learning', 'data', 'cloud', 'backend', 'frontend', 'interface', 'dashboard', 'analytics', 'reporting', 'compliance', 'security', 'scalability', 'performance', 'deployment', 'devops', 'pipeline', 'architecture', 'framework', 'library', 'libraries', 'sdk', 'ux', 'ui', 'user experience', 'user interface', 'design', 'proprietary', 'patent', 'patented', 'intellectual property', 'ip', 'unique', 'differentiator', 'differentiation', 'advantage', 'moat', 'core', 'core tech', 'core technology', 'core product', 'core platform', 'core solution', 'core feature', 'core capability', 'core offering', 'core module', 'core engine', 'core system', 'core stack', 'core software', 'core hardware', 'core service', 'core tool', 'core api', 'core mobile', 'core web', 'core app', 'core application', 'core applications', 'core integration', 'core integrations', 'core workflow', 'core workflows', 'core automation', 'core ai', 'core ml', 'core machine learning', 'core data', 'core cloud', 'core backend', 'core frontend', 'core interface', 'core dashboard', 'core analytics', 'core reporting', 'core compliance', 'core security', 'core scalability', 'core performance', 'core deployment', 'core devops', 'core pipeline', 'core architecture', 'core framework', 'core library', 'core libraries', 'core sdk', 'core ux', 'core ui', 'core user experience', 'core user interface', 'core design', 'core proprietary', 'core patent', 'core patented', 'core intellectual property', 'core ip', 'core unique', 'core differentiator', 'core differentiation', 'core advantage', 'core moat'
 ];
 
 // Sector detection keywords
@@ -31,9 +32,11 @@ export function extractProductTechSignals(
   let sector: ProductTechSignals['sector'] = 'unknown';
   const keyMetrics: Record<string, string | number> = {};
 
+
   for (const chunk of sectionChunks) {
     const lowerSection = chunk.section.toLowerCase();
-    if (SECTION_KEYWORDS.some(k => lowerSection.includes(k))) {
+    // Flexible: allow fuzzy/partial match
+    if (SECTION_KEYWORDS.some(k => lowerSection.includes(k) || chunk.text.toLowerCase().includes(k))) {
       evidence.push({ section: chunk.section, snippet: chunk.text });
       productSummary += chunk.text + '\n';
     }
@@ -52,7 +55,14 @@ export function extractProductTechSignals(
     }
   }
 
-  // If no product summary, leave empty
+  // Fallback: if no product summary, use the largest chunk
+  if (!productSummary && sectionChunks.length > 0) {
+    const largest = sectionChunks.reduce((a, b) => (a.text.length > b.text.length ? a : b));
+    productSummary = largest.text;
+    evidence.push({ section: largest.section, snippet: largest.text });
+  }
+
+
   productSummary = productSummary.trim();
 
   return {

@@ -12,6 +12,8 @@ export interface ProductTechSignals {
     section: string;
     snippet: string;
   }>;
+  MVP?: string;
+  metricsComparison?: Record<string, string>;
 }
 // Structured claim extracted from startup documents
 export interface StartupClaims {

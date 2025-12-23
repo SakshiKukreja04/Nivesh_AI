@@ -41,25 +41,51 @@ import ProductTechnologyCard from '@/components/dashboard/ProductTechnologyCard'
 import CompetitiveLandscapeCard from '@/components/dashboard/CompetitiveLandscapeCard';
 import TractionGrowthCard from '@/components/dashboard/TractionGrowthCard';
 
-const radarData = [
-  { subject: 'Team', A: 85, fullMark: 100 },
-  { subject: 'Market', A: 78, fullMark: 100 },
-  { subject: 'Product', A: 92, fullMark: 100 },
-  { subject: 'Traction', A: 70, fullMark: 100 },
-  { subject: 'Risk', A: 65, fullMark: 100 },
-];
+// Dynamic risk and radar data
+const getRiskLevel = (risk: string) => {
+  // Simple heuristic: look for keywords
+  if (/critical|lack|no|insufficient|major|severe|0 years|red flag|concentration|runway|burn|dependency|key person|founder|fraud|legal|compliance|high/.test(risk.toLowerCase())) return 'high';
+  if (/inconsistent|moderate|some|partial|medium|competition|pressure|churn|attrition|education|credentials|team|experience/.test(risk.toLowerCase())) return 'medium';
+  return 'low';
+};
 
-const riskDistribution = [
-  { name: 'Low Risk', value: 45, color: 'hsl(var(--success))' },
-  { name: 'Medium Risk', value: 35, color: 'hsl(var(--warning))' },
-  { name: 'High Risk', value: 20, color: 'hsl(var(--destructive))' },
-];
+function getDynamicRadarData(ragAnalysis: any) {
+  // Example: assign lower risk score if more risks
+  const riskScore = ragAnalysis?.topRisks ? Math.max(100 - ragAnalysis.topRisks.length * 20, 40) : 65;
+  return [
+    { subject: 'Team', A: 85, fullMark: 100 },
+    { subject: 'Market', A: 78, fullMark: 100 },
+    { subject: 'Product', A: 92, fullMark: 100 },
+    { subject: 'Traction', A: 70, fullMark: 100 },
+    { subject: 'Risk', A: riskScore, fullMark: 100 },
+  ];
+}
 
-const risks = [
-  { level: 'high', text: 'Limited runway — 8 months at current burn' },
-  { level: 'medium', text: 'Key person dependency on CTO' },
-  { level: 'low', text: 'Competitive pressure from established players' },
-];
+function getDynamicRiskDistribution(ragAnalysis: any) {
+  if (!ragAnalysis?.topRisks) return [
+    { name: 'Low Risk', value: 45, color: 'hsl(var(--success))' },
+    { name: 'Medium Risk', value: 35, color: 'hsl(var(--warning))' },
+    { name: 'High Risk', value: 20, color: 'hsl(var(--destructive))' },
+  ];
+  let high = 0, medium = 0, low = 0;
+  ragAnalysis.topRisks.forEach((risk: string) => {
+    const lvl = getRiskLevel(risk);
+    if (lvl === 'high') high++;
+    else if (lvl === 'medium') medium++;
+    else low++;
+  });
+  const total = Math.max(1, ragAnalysis.topRisks.length);
+  return [
+    { name: 'Low Risk', value: Math.round((low / total) * 100), color: 'hsl(var(--success))' },
+    { name: 'Medium Risk', value: Math.round((medium / total) * 100), color: 'hsl(var(--warning))' },
+    { name: 'High Risk', value: Math.round((high / total) * 100), color: 'hsl(var(--destructive))' },
+  ];
+}
+
+function getDynamicRisks(ragAnalysis: any) {
+  if (!ragAnalysis?.topRisks) return [];
+  return ragAnalysis.topRisks.map((risk: string) => ({ level: getRiskLevel(risk), text: risk }));
+}
 
 interface FounderVerification {
   startupId: string;
@@ -99,24 +125,52 @@ const Dashboard = () => {
   const [startupClaims, setStartupClaims] = useState<any[]>([]);
 
   const [executiveSummary, setExecutiveSummary] = useState<string>("");
+  const [ragAnalysis, setRagAnalysis] = useState<any>(null);
   const [marketOpportunity, setMarketOpportunity] = useState<any>(null);
+
+  // Confidence/decision logic
+  const [confidenceLevel, setConfidenceLevel] = useState<string>('N/A');
+  const [decision, setDecision] = useState<string>('N/A');
+
+  useEffect(() => {
+    // Compute confidence and decision based on risks
+    if (ragAnalysis && ragAnalysis.topRisks) {
+      const totalRisks = ragAnalysis.topRisks.length;
+      // Heuristic: 0-1 risks = High, 2 = Medium, 3+ = Low
+      let conf = 'N/A';
+      let dec = 'N/A';
+      if (totalRisks === 0) {
+        conf = 'High conviction';
+        dec = 'PROCEED';
+      } else if (totalRisks === 1) {
+        conf = 'High conviction';
+        dec = 'PROCEED';
+      } else if (totalRisks === 2) {
+        conf = 'Moderate';
+        dec = 'PROCEED';
+      } else if (totalRisks >= 3) {
+        conf = 'Low';
+        dec = 'REJECT';
+      }
+      setConfidenceLevel(conf);
+      setDecision(dec);
+    } else {
+      setConfidenceLevel('N/A');
+      setDecision('N/A');
+    }
+  }, [ragAnalysis]);
   useEffect(() => {
     if (startupId) {
-      // Fetch startup metadata, claims, summary, and market opportunity from backend
-      fetch(`/api/startup/${startupId}`)
+      // Fetch startup metadata, claims, summary, and market opportunity from new S3-backed endpoint
+      fetch(`/api/startup/${startupId}/metadata`)
         .then(res => res.json())
         .then(data => {
-          if (data && data.metadata) {
-            setStartupMetadata(data.metadata);
-          }
-          if (data && data.claims) {
-            setStartupClaims(data.claims);
-          }
-          if (data && data.summary) {
-            setExecutiveSummary(data.summary);
-          }
-          if (data && data.marketOpportunity) {
-            setMarketOpportunity(data.marketOpportunity);
+          if (data) {
+            setStartupMetadata(data.metadata || data.metadata || data);
+            setStartupClaims(data.claims || []);
+            setExecutiveSummary(data.summary || '');
+            setMarketOpportunity(data.marketOpportunity || null);
+            setRagAnalysis(data.analysis || data.ragAnalysis || null);
           }
         })
         .catch(err => {
@@ -192,7 +246,9 @@ const Dashboard = () => {
                   <Building2 className="h-7 w-7 text-secondary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-foreground">{startupMetadata?.name || 'Startup'}</h1>
+                  <h1 className="text-2xl font-bold text-foreground">
+                    {startupMetadata?.startupName || startupMetadata?.name || 'Startup'}
+                  </h1>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="px-2 py-0.5 rounded-full bg-muted text-xs font-medium text-muted-foreground">
                       {startupMetadata?.stage || 'N/A'}
@@ -215,9 +271,9 @@ const Dashboard = () => {
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ delay: 0.3, type: 'spring' }}
-                    className="px-6 py-2 rounded-full bg-proceed text-proceed-foreground font-bold shadow-success"
+                    className={`px-6 py-2 rounded-full font-bold shadow-success ${decision === 'PROCEED' ? 'bg-proceed text-proceed-foreground' : decision === 'REJECT' ? 'bg-destructive text-destructive-foreground' : 'bg-muted text-muted-foreground'}`}
                   >
-                    PROCEED
+                    {decision}
                   </motion.div>
                 </div>
 
@@ -231,11 +287,11 @@ const Dashboard = () => {
                         cy="50"
                         r="40"
                         fill="none"
-                        stroke="hsl(var(--success))"
+                        stroke={confidenceLevel === 'High conviction' ? 'hsl(var(--success))' : confidenceLevel === 'Moderate' ? 'hsl(var(--warning))' : confidenceLevel === 'Low' ? 'hsl(var(--destructive))' : 'hsl(var(--muted-foreground))'}
                         strokeWidth="8"
                         strokeLinecap="round"
                         initial={{ strokeDasharray: '0 251' }}
-                        animate={{ strokeDasharray: `${(startupMetadata?.confidenceScore || 0) * 2.51} 251` }}
+                        animate={{ strokeDasharray: `${confidenceLevel === 'High conviction' ? 251 : confidenceLevel === 'Moderate' ? 180 : confidenceLevel === 'Low' ? 80 : 0} 251` }}
                         transition={{ duration: 1.5, delay: 0.5, ease: 'easeOut' }}
                       />
                     </svg>
@@ -246,13 +302,13 @@ const Dashboard = () => {
                         animate={{ opacity: 1 }}
                         transition={{ delay: 1 }}
                       >
-                        {startupMetadata?.confidenceScore || 'N/A'}
+                        {confidenceLevel === 'High conviction' ? 'A' : confidenceLevel === 'Moderate' ? 'B' : confidenceLevel === 'Low' ? 'C' : 'N/A'}
                       </motion.span>
                     </div>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">Confidence</p>
-                    <p className="text-xs text-success">High conviction</p>
+                    <p className={`text-xs ${confidenceLevel === 'High conviction' ? 'text-success' : confidenceLevel === 'Moderate' ? 'text-warning' : confidenceLevel === 'Low' ? 'text-destructive' : 'text-muted-foreground'}`}>{confidenceLevel}</p>
                   </div>
                 </div>
               </div>
@@ -288,6 +344,35 @@ const Dashboard = () => {
                     Runway Risk
                   </span>
                 </div>
+                {/* RAG Analysis Section */}
+                {ragAnalysis && (
+                  <div className="mt-6">
+                    <h3 className="text-md font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-secondary" />
+                      RAG Analysis
+                    </h3>
+                    <div className="mb-2">
+                      <span className="font-semibold">Summary:</span>
+                      <span className="ml-2 text-muted-foreground">{ragAnalysis.summary}</span>
+                    </div>
+                    <div className="mb-2">
+                      <span className="font-semibold">Top Risks:</span>
+                      <ul className="list-disc ml-6">
+                        {ragAnalysis.topRisks && ragAnalysis.topRisks.map((risk: string, idx: number) => (
+                          <li key={idx} className="text-xs text-destructive">{risk}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="mb-2">
+                      <span className="font-semibold">Team Assessment:</span>
+                      <span className="ml-2 text-muted-foreground">{ragAnalysis.teamAssessment}</span>
+                    </div>
+                    <div className="mb-2">
+                      <span className="font-semibold">Market Outlook:</span>
+                      <span className="ml-2 text-muted-foreground">{ragAnalysis.marketOutlook}</span>
+                    </div>
+                  </div>
+                )}
               </motion.div>
 
               {/* Startup Snapshot - dynamic metadata and claims */}
@@ -344,26 +429,53 @@ const Dashboard = () => {
               {/* Founder & Team - Expanded */}
               <FounderTeamCard founderVerification={founderVerification} teamInfo={teamInfo} />
 
-              {/* Market Opportunity */}
-              <MarketOpportunityCard
-                metrics={marketOpportunity ? [
-                  { metric: 'TAM (Validated)', value: marketOpportunity.validatedTAM ? `$${marketOpportunity.validatedTAM.toLocaleString()}` : 'N/A', status: 'verified' },
-                  { metric: 'SAM', value: marketOpportunity.SAM ? `$${marketOpportunity.SAM.toLocaleString()}` : 'N/A', status: 'verified' },
-                  { metric: 'SOM (Year 3)', value: marketOpportunity.SOM ? `$${marketOpportunity.SOM.toLocaleString()}` : 'N/A', status: 'projected' },
-                  { metric: 'Market Growth Rate', value: marketOpportunity.growthRate ? `${marketOpportunity.growthRate}% CAGR` : 'N/A', status: 'positive' },
-                ] : []}
-                problemClarity={marketOpportunity?.problemClarity}
-                aiMarketAnalysis={marketOpportunity?.aiMarketAnalysis}
-              />
+
+              {/* Market Assessment & AI Analysis */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="bg-card rounded-2xl border border-border shadow-lg p-6"
+              >
+                <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-secondary" />
+                  Market Assessment
+                </h2>
+                {marketOpportunity ? (
+                  <>
+                    <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                      {[
+                        { label: 'TAM (Validated)', value: marketOpportunity.validatedTAM ? `$${marketOpportunity.validatedTAM.toLocaleString()}` : 'N/A' },
+                        { label: 'SAM', value: marketOpportunity.SAM ? `$${marketOpportunity.SAM.toLocaleString()}` : 'N/A' },
+                        { label: 'SOM (Year 3)', value: marketOpportunity.SOM ? `$${marketOpportunity.SOM.toLocaleString()}` : 'N/A' },
+                        { label: 'Market Growth Rate', value: marketOpportunity.growthRate ? `${marketOpportunity.growthRate}% CAGR` : 'N/A' },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                          <span className="text-xs text-muted-foreground font-semibold">{label}</span>
+                          <span className="font-medium text-foreground">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {marketOpportunity.aiMarketAnalysis && (
+                      <div className="mt-2">
+                        <h3 className="text-sm font-semibold text-foreground mb-1">AI Market Analysis</h3>
+                        <p className="text-muted-foreground leading-relaxed">{marketOpportunity.aiMarketAnalysis}</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-xs text-muted-foreground">No market opportunity data found.</div>
+                )}
+              </motion.div>
 
               {/* Product & Technology */}
-              <ProductTechnologyCard />
+              <ProductTechnologyCard productTech={startupMetadata?.productTech} />
 
               {/* Traction & Growth */}
               <TractionGrowthCard />
 
               {/* Competitive Landscape */}
-              <CompetitiveLandscapeCard />
+              <CompetitiveLandscapeCard sector={startupMetadata?.sector} />
             </div>
 
             {/* Right Column */}
@@ -381,7 +493,7 @@ const Dashboard = () => {
                 </h2>
                 <div className="h-48 mb-4">
                   <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={radarData}>
+                    <RadarChart data={getDynamicRadarData(ragAnalysis)}>
                       <PolarGrid stroke="hsl(var(--border))" />
                       <PolarAngleAxis dataKey="subject" stroke="hsl(var(--muted-foreground))" fontSize={11} />
                       <PolarRadiusAxis stroke="hsl(var(--border))" />
@@ -398,7 +510,7 @@ const Dashboard = () => {
 
                 {/* Risk Chips */}
                 <div className="space-y-2">
-                  {risks.map((risk, i) => (
+                  {getDynamicRisks(ragAnalysis).map((risk, i) => (
                     <motion.div
                       key={i}
                       initial={{ opacity: 0, x: -10 }}
@@ -442,7 +554,7 @@ const Dashboard = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={riskDistribution}
+                        data={getDynamicRiskDistribution(ragAnalysis)}
                         cx="50%"
                         cy="50%"
                         innerRadius={50}
@@ -450,7 +562,7 @@ const Dashboard = () => {
                         paddingAngle={5}
                         dataKey="value"
                       >
-                        {riskDistribution.map((entry, index) => (
+                        {getDynamicRiskDistribution(ragAnalysis).map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
@@ -458,7 +570,7 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
                 <div className="flex justify-center gap-4 mt-2">
-                  {riskDistribution.map((item) => (
+                  {getDynamicRiskDistribution(ragAnalysis).map((item) => (
                     <div key={item.name} className="flex items-center gap-1">
                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                       <span className="text-xs text-muted-foreground">{item.name}</span>
@@ -480,12 +592,26 @@ const Dashboard = () => {
                 <div className="bg-muted rounded-xl p-4 mb-4">
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => setIsPlaying(!isPlaying)}
+                      onClick={async () => {
+                        if (!isPlaying) {
+                          setIsPlaying(true);
+                          const audio = document.getElementById('audio-summary') as HTMLAudioElement;
+                          if (audio) {
+                            audio.play();
+                            audio.onended = () => setIsPlaying(false);
+                          }
+                        } else {
+                          setIsPlaying(false);
+                          const audio = document.getElementById('audio-summary') as HTMLAudioElement;
+                          if (audio) audio.pause();
+                        }
+                      }}
                       className="h-12 w-12 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground hover:bg-secondary/80 transition-all hover:scale-105 active:scale-95"
                     >
                       {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
                     </button>
                     <div className="flex-1">
+                      <audio id="audio-summary" src={startupId ? `/api/audio-summary/${startupId}` : undefined} preload="none" />
                       <div className="flex gap-0.5 mb-1">
                         {[...Array(30)].map((_, i) => (
                           <motion.div
@@ -497,7 +623,7 @@ const Dashboard = () => {
                           />
                         ))}
                       </div>
-                      <p className="text-xs text-muted-foreground">2:34 / 5:12</p>
+                      <p className="text-xs text-muted-foreground">Audio summary will play when you click the button.</p>
                     </div>
                   </div>
                 </div>
